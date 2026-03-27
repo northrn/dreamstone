@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { requireProjectAccess } from '@/lib/access-control'
 
 export async function GET(
   request: NextRequest,
@@ -14,6 +15,9 @@ export async function GET(
         { status: 400 },
       )
     }
+
+    const forbiddenResponse = await requireProjectAccess(request, projectId)
+    if (forbiddenResponse) return forbiddenResponse
 
     // Get project details by ID
     const response = await v0.projects.getById({ projectId })

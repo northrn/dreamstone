@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { requireProjectAccess, requireChatAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,15 @@ export async function POST(request: NextRequest) {
 
     // Get user's IP
     const userIP = getUserIP(request)
+
+    const { denied } = await requireChatAccess(request, chatId)
+    if (denied) return denied
+
+    // If caller requested a specific destination project, they must own that too.
+    if (projectId) {
+      const targetForbidden = await requireProjectAccess(request, projectId)
+      if (targetForbidden) return targetForbidden
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
