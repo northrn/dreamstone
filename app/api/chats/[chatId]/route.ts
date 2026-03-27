@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from 'v0-sdk'
+import { requireChatAccess } from '@/lib/access-control'
 
 export async function GET(
   request: NextRequest,
@@ -15,14 +15,10 @@ export async function GET(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { denied, chat } = await requireChatAccess(request, chatId)
+    if (denied) return denied
 
-    // Get chat details by ID
-    const response = await v0.chats.getById({ chatId: chatId })
-
-    return NextResponse.json(response)
+    return NextResponse.json(chat)
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -61,12 +57,11 @@ export async function DELETE(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { client, denied } = await requireChatAccess(request, chatId)
+    if (denied) return denied
 
     // Delete chat using v0 SDK
-    await v0.chats.delete({ chatId })
+    await client.chats.delete({ chatId })
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -114,12 +109,11 @@ export async function PATCH(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { client, denied } = await requireChatAccess(request, chatId)
+    if (denied) return denied
 
     // Update chat name using v0 SDK
-    const response = await v0.chats.update({
+    const response = await client.chats.update({
       chatId: chatId,
       name: name.trim(),
     })

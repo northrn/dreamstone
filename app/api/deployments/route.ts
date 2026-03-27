@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { requireChatAccess, requireProjectAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,22 @@ export async function POST(request: NextRequest) {
           },
         },
         { status: 400 },
+      )
+    }
+
+    const forbiddenResponse = await requireProjectAccess(request, projectId)
+    if (forbiddenResponse) return forbiddenResponse
+
+    const { projectId: chatProjectId, denied: chatDenied } =
+      await requireChatAccess(request, chatId)
+    if (chatDenied) return chatDenied
+    if (chatProjectId && chatProjectId !== projectId) {
+      return NextResponse.json(
+        {
+          error: 'FORBIDDEN',
+          message: 'The chat does not belong to the requested project.',
+        },
+        { status: 403 },
       )
     }
 

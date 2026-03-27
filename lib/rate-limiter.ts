@@ -74,6 +74,11 @@ export async function getUserProjects(userIP: string): Promise<string[]> {
   }
 }
 
+// Whether project ownership tracking is available.
+export function isProjectTrackingEnabled(): boolean {
+  return redis !== null
+}
+
 // Check if rate limit is exceeded
 export async function checkRateLimit(identifier: string) {
   // If rate limiting is not enabled, always allow the request
