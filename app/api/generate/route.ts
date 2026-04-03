@@ -1,6 +1,12 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  checkRateLimit,
+  getUserIdentifier,
+  getUserIP,
+  associateProjectWithIP,
+  userOwnsProject,
+} from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +31,25 @@ export async function POST(request: NextRequest) {
     const userIdentifier = getUserIdentifier(request)
     const userIP = getUserIP(request)
     const rateLimitResult = await checkRateLimit(userIdentifier)
+
+    if (projectId) {
+      const ownsProject = await userOwnsProject(userIP, projectId)
+      if (!ownsProject) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+      }
+    }
+
+    if (chatId) {
+      const existingChat = await v0.chats.getById({ chatId })
+      if (!existingChat?.projectId) {
+        return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
+      }
+
+      const ownsChatProject = await userOwnsProject(userIP, existingChat.projectId)
+      if (!ownsChatProject) {
+        return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
+      }
+    }
     
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()
