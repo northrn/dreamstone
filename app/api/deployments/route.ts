@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { getUserIP, userOwnsProject } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,17 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    const userIP = getUserIP(request)
+    const ownsProject = await userOwnsProject(userIP, projectId)
+    if (!ownsProject) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    }
+
+    const chat = await v0.chats.getById({ chatId })
+    if (!chat?.projectId || chat.projectId !== projectId) {
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
     }
 
     // Create deployment using v0 SDK

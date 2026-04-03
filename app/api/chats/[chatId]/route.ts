@@ -1,5 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import { getUserIP, userOwnsProject } from '@/lib/rate-limiter'
+
+async function ensureUserOwnsChat(
+  request: NextRequest,
+  chatId: string,
+): Promise<{ errorResponse: NextResponse | null; v0: ReturnType<typeof createClient> }> {
+  const v0 = createClient({
+    apiKey: process.env.V0_API_KEY,
+  })
+
+  const chat = await v0.chats.getById({ chatId })
+  if (!chat?.projectId) {
+    return {
+      errorResponse: NextResponse.json({ error: 'Chat not found' }, { status: 404 }),
+      v0,
+    }
+  }
+
+  const userIP = getUserIP(request)
+  const ownsProject = await userOwnsProject(userIP, chat.projectId)
+  if (!ownsProject) {
+    return {
+      errorResponse: NextResponse.json({ error: 'Chat not found' }, { status: 404 }),
+      v0,
+    }
+  }
+
+  return { errorResponse: null, v0 }
+}
 
 export async function GET(
   request: NextRequest,
@@ -15,9 +44,8 @@ export async function GET(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { errorResponse, v0 } = await ensureUserOwnsChat(request, chatId)
+    if (errorResponse) return errorResponse
 
     // Get chat details by ID
     const response = await v0.chats.getById({ chatId: chatId })
@@ -61,9 +89,8 @@ export async function DELETE(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { errorResponse, v0 } = await ensureUserOwnsChat(request, chatId)
+    if (errorResponse) return errorResponse
 
     // Delete chat using v0 SDK
     await v0.chats.delete({ chatId })
@@ -114,9 +141,8 @@ export async function PATCH(
       )
     }
 
-    const v0 = createClient({
-      apiKey: process.env.V0_API_KEY,
-    })
+    const { errorResponse, v0 } = await ensureUserOwnsChat(request, chatId)
+    if (errorResponse) return errorResponse
 
     // Update chat name using v0 SDK
     const response = await v0.chats.update({

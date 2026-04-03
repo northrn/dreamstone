@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { getUserIP, userOwnsProject } from '@/lib/rate-limiter'
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +14,12 @@ export async function GET(
         { error: 'Project ID is required' },
         { status: 400 },
       )
+    }
+
+    const userIP = getUserIP(request)
+    const ownsProject = await userOwnsProject(userIP, projectId)
+    if (!ownsProject) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
     // Get project details by ID

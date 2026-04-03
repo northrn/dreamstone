@@ -9,6 +9,7 @@ const isRateLimitingEnabled = upstashUrl && upstashToken && upstashUrl.trim() !=
 // Create Redis instance and rate limiter only if credentials are available
 let generationRateLimit: Ratelimit | null = null
 let redis: Redis | null = null
+const inMemoryProjectAssociations = new Map<string, Set<string>>()
 
 if (isRateLimitingEnabled) {
   redis = new Redis({
@@ -51,10 +52,16 @@ export function getUserIP(request: Request): string {
 
 // Function to associate an IP with a project
 export async function associateProjectWithIP(projectId: string, userIP: string): Promise<void> {
-  if (!redis) return // Skip if Redis is not available
-  
+  if (!projectId) return
+
+  if (!redis) {
+    const projectSet = inMemoryProjectAssociations.get(userIP) ?? new Set<string>()
+    projectSet.add(projectId)
+    inMemoryProjectAssociations.set(userIP, projectSet)
+    return
+  }
+
   try {
-    // Store only user_projects mapping
     await redis.sadd(`user_projects:${userIP}`, projectId)
   } catch (error) {
     console.warn('Failed to associate project with IP:', error)
@@ -63,8 +70,10 @@ export async function associateProjectWithIP(projectId: string, userIP: string):
 
 // Function to get user's projects
 export async function getUserProjects(userIP: string): Promise<string[]> {
-  if (!redis) return [] // Return empty if Redis is not available
-  
+  if (!redis) {
+    return Array.from(inMemoryProjectAssociations.get(userIP) ?? [])
+  }
+
   try {
     const projectIds = await redis.smembers(`user_projects:${userIP}`)
     return projectIds as string[]
@@ -72,6 +81,11 @@ export async function getUserProjects(userIP: string): Promise<string[]> {
     console.warn('Failed to get user projects:', error)
     return []
   }
+}
+
+export async function userOwnsProject(userIP: string, projectId: string): Promise<boolean> {
+  const userProjectIds = await getUserProjects(userIP)
+  return userProjectIds.includes(projectId)
 }
 
 // Check if rate limit is exceeded
