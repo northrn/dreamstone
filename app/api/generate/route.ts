@@ -1,6 +1,6 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP, userOwnsProject } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +50,18 @@ export async function POST(request: NextRequest) {
     let response
 
     if (chatId) {
+      const existingChat = await v0.chats.getById({ chatId })
+      const existingProjectId = existingChat?.projectId || existingChat?.project?.id
+      const hasAccess = existingProjectId
+        ? await userOwnsProject(userIP, existingProjectId)
+        : false
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: 'Chat not found' },
+          { status: 404 },
+        )
+      }
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,6 +74,16 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId) {
+        const canAccessProject = await userOwnsProject(userIP, projectId)
+        if (!canAccessProject) {
+          return NextResponse.json(
+            { error: 'Project not found' },
+            { status: 404 },
+          )
+        }
+      }
+
       // Create new chat
       response = await v0.chats.create({
         system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',

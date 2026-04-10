@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { getUserIP, associateProjectWithIP, userOwnsProject } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +15,30 @@ export async function POST(request: NextRequest) {
 
     // Get user's IP
     const userIP = getUserIP(request)
+
+    // Ensure user can access the source chat before forking it.
+    const sourceChat = await v0.chats.getById({ chatId })
+    const sourceProjectId = sourceChat?.projectId || sourceChat?.project?.id
+    const canAccessSourceProject = sourceProjectId
+      ? await userOwnsProject(userIP, sourceProjectId)
+      : false
+    if (!canAccessSourceProject) {
+      return NextResponse.json(
+        { error: 'Chat not found' },
+        { status: 404 },
+      )
+    }
+
+    // If targeting an explicit project, require access to that project too.
+    if (projectId) {
+      const canAccessTargetProject = await userOwnsProject(userIP, projectId)
+      if (!canAccessTargetProject) {
+        return NextResponse.json(
+          { error: 'Project not found' },
+          { status: 404 },
+        )
+      }
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({

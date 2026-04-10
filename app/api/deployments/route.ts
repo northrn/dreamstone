@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { getUserIP, userOwnsProject } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,15 @@ export async function POST(request: NextRequest) {
           },
         },
         { status: 400 },
+      )
+    }
+
+    const userIP = getUserIP(request)
+    const hasAccess = await userOwnsProject(userIP, projectId)
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 },
       )
     }
 

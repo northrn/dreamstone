@@ -74,6 +74,22 @@ export async function getUserProjects(userIP: string): Promise<string[]> {
   }
 }
 
+// Whether project-level access control checks can be enforced.
+export function isProjectAccessControlEnabled(): boolean {
+  return Boolean(redis)
+}
+
+// Check if an IP is authorized to access a project.
+export async function userOwnsProject(userIP: string, projectId: string): Promise<boolean> {
+  if (!projectId) return false
+
+  // Preserve existing behavior when Redis mapping is unavailable.
+  if (!isProjectAccessControlEnabled()) return true
+
+  const userProjectIds = await getUserProjects(userIP)
+  return userProjectIds.includes(projectId)
+}
+
 // Check if rate limit is exceeded
 export async function checkRateLimit(identifier: string) {
   // If rate limiting is not enabled, always allow the request
