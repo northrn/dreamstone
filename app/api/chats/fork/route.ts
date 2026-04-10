@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure user can access the source chat before forking it.
     const sourceChat = await v0.chats.getById({ chatId })
-    const sourceProjectId = sourceChat?.projectId || sourceChat?.project?.id
+    const sourceProjectId = sourceChat?.projectId
     const canAccessSourceProject = sourceProjectId
       ? await userOwnsProject(userIP, sourceProjectId)
       : false

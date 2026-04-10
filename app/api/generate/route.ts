@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     if (chatId) {
       const existingChat = await v0.chats.getById({ chatId })
-      const existingProjectId = existingChat?.projectId || existingChat?.project?.id
+      const existingProjectId = existingChat?.projectId
       const hasAccess = existingProjectId
         ? await userOwnsProject(userIP, existingProjectId)
         : false

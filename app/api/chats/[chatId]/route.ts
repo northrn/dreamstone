@@ -3,7 +3,7 @@ import { createClient } from 'v0-sdk'
 import { getUserIP, userOwnsProject } from '@/lib/rate-limiter'
 
 async function canAccessChat(request: NextRequest, chat: any): Promise<boolean> {
-  const projectId = chat?.projectId || chat?.project?.id
+  const projectId = chat?.projectId
   if (!projectId) return false
 
   const userIP = getUserIP(request)
