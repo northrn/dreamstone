@@ -61,16 +61,25 @@ export async function associateProjectWithIP(projectId: string, userIP: string):
   }
 }
 
+type UserProjectsLookup = {
+  projectIds: string[]
+  trackingAvailable: boolean
+}
+
 // Function to get user's projects
-export async function getUserProjects(userIP: string): Promise<string[]> {
-  if (!redis) return [] // Return empty if Redis is not available
-  
+export async function getUserProjects(
+  userIP: string,
+): Promise<UserProjectsLookup> {
+  if (!redis) {
+    return { projectIds: [], trackingAvailable: false }
+  }
+
   try {
     const projectIds = await redis.smembers(`user_projects:${userIP}`)
-    return projectIds as string[]
+    return { projectIds: projectIds as string[], trackingAvailable: true }
   } catch (error) {
     console.warn('Failed to get user projects:', error)
-    return []
+    return { projectIds: [], trackingAvailable: false }
   }
 }
 
