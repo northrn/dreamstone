@@ -12,12 +12,14 @@ export async function GET(request: NextRequest) {
     const allProjects = response.data || response || []
     
     // Get user's project IDs from Redis
-    const userProjectIds = await getUserProjects(userIP)
-    
-    // Filter projects to only include those owned by this user
-    const userProjects = allProjects.filter((project: any) => 
-      userProjectIds.includes(project.id)
-    )
+    const { projectIds: userProjectIds, trackingAvailable } =
+      await getUserProjects(userIP)
+
+    // When project ownership tracking is unavailable (Redis disabled/unreachable),
+    // return all projects to avoid silently hiding existing user projects.
+    const userProjects = trackingAvailable
+      ? allProjects.filter((project: any) => userProjectIds.includes(project.id))
+      : allProjects
     
     return NextResponse.json({ data: userProjects })
   } catch (error) {
