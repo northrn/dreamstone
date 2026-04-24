@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { requireChatAccess, requireProjectAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,23 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    const forbiddenResponse = await requireProjectAccess(request, projectId)
+    if (forbiddenResponse) {
+      return forbiddenResponse
+    }
+
+    const { projectId: chatProjectId, denied } = await requireChatAccess(
+      request,
+      chatId,
+    )
+    if (denied) {
+      return denied
+    }
+
+    if (chatProjectId && chatProjectId !== projectId) {
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
     }
 
     // Create deployment using v0 SDK
