@@ -1,6 +1,7 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { requireProjectAccess, requireChatAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,6 +51,11 @@ export async function POST(request: NextRequest) {
     let response
 
     if (chatId) {
+      const { denied } = await requireChatAccess(request, chatId)
+      if (denied) {
+        return denied
+      }
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,6 +68,13 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId) {
+        const forbiddenResponse = await requireProjectAccess(request, projectId)
+        if (forbiddenResponse) {
+          return forbiddenResponse
+        }
+      }
+
       // Create new chat
       response = await v0.chats.create({
         system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
