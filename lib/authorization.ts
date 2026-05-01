@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { getUserIP, getUserProjects, isProjectAssociationStoreEnabled } from './rate-limiter'
+import {
+  getUserIP,
+  getUserProjects,
+  isProjectAssociationStoreEnabled,
+} from './rate-limiter'
 
 const projectOwnershipCookie = 'v0_owned_projects'
 const cookieMaxAge = 60 * 60 * 24 * 30

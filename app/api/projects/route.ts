@@ -8,21 +8,18 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user's IP
-    const userIP = getUserIP(request)
-    
     // Get all projects from v0
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
-    
+
     // Get project IDs associated with this requester.
     const userProjectIds = await ownedProjectIdsForRequest(request)
-    
+
     // Filter projects to only include those owned by this user
     const userProjects = allProjects.filter((project: any) =>
       userProjectIds.has(project.id),
     )
-    
+
     return NextResponse.json({ data: userProjects })
   } catch (error) {
     // Check if it's an API key error
@@ -72,7 +69,11 @@ export async function POST(request: NextRequest) {
       await associateProjectWithIP(project.id, userIP)
     }
 
-    return addProjectOwnershipCookie(NextResponse.json(project), request, project.id)
+    return addProjectOwnershipCookie(
+      NextResponse.json(project),
+      request,
+      project.id,
+    )
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

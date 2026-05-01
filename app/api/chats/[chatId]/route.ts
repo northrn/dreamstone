@@ -14,7 +14,9 @@ async function authorizeChatAccess(
 ) {
   const projectAccess = await authorizeProjectAccess(request, projectId, v0)
 
-  return projectAccess.authorized && projectHasChat(projectAccess.project, chatId)
+  return (
+    projectAccess.authorized && projectHasChat(projectAccess.project, chatId)
+  )
 }
 
 export async function GET(

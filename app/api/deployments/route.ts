@@ -35,6 +35,10 @@ export async function POST(request: NextRequest) {
     }
 
     const chat = await v0.chats.getById({ chatId })
+    if (chat.projectId && chat.projectId !== projectId) {
+      return forbiddenResponse()
+    }
+
     if (!chatHasVersion(chat, versionId)) {
       return forbiddenResponse()
     }
