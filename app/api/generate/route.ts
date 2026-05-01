@@ -1,6 +1,17 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  associateProjectWithIP,
+  checkRateLimit,
+  getUserIdentifier,
+  getUserIP,
+} from '@/lib/rate-limiter'
+import {
+  addProjectOwnershipCookie,
+  authorizeProjectAccess,
+  forbiddenResponse,
+  projectHasChat,
+} from '@/lib/authorization'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,31 +36,46 @@ export async function POST(request: NextRequest) {
     const userIdentifier = getUserIdentifier(request)
     const userIP = getUserIP(request)
     const rateLimitResult = await checkRateLimit(userIdentifier)
-    
+
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()
       return NextResponse.json(
-        { 
+        {
           error: 'RATE_LIMIT_EXCEEDED',
           message: `You've reached the limit of 3 generations per 12 hours. Please try again after ${resetTime}.`,
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
-          resetTime: rateLimitResult.resetTime.toISOString()
+          resetTime: rateLimitResult.resetTime.toISOString(),
         },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit.toString(),
             'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
             'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          }
-        }
+          },
+        },
       )
     }
 
     let response
 
     if (chatId) {
+      if (!projectId) {
+        return NextResponse.json(
+          { error: 'Project ID is required when continuing a chat' },
+          { status: 400 },
+        )
+      }
+
+      const projectAccess = await authorizeProjectAccess(request, projectId, v0)
+      if (
+        !projectAccess.authorized ||
+        !projectHasChat(projectAccess.project, chatId)
+      ) {
+        return forbiddenResponse()
+      }
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,6 +88,17 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId) {
+        const projectAccess = await authorizeProjectAccess(
+          request,
+          projectId,
+          v0,
+        )
+        if (!projectAccess.authorized) {
+          return forbiddenResponse()
+        }
+      }
+
       // Create new chat
       response = await v0.chats.create({
         system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
@@ -79,7 +116,7 @@ export async function POST(request: NextRequest) {
       if (response.projectId) {
         await associateProjectWithIP(response.projectId, userIP)
       }
-      
+
       // Rename the new chat to "Main" for new projects
       try {
         await v0.chats.update({
@@ -91,7 +128,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(response)
+    const jsonResponse = NextResponse.json(response)
+    if (!chatId && response.projectId) {
+      addProjectOwnershipCookie(jsonResponse, request, response.projectId)
+    }
+
+    return jsonResponse
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  addProjectOwnershipCookie,
+  authorizeProjectAccess,
+  forbiddenResponse,
+  projectHasChat,
+} from '@/lib/authorization'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,13 +19,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!projectId) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 },
+      )
+    }
+
     // Get user's IP
     const userIP = getUserIP(request)
+    const projectAccess = await authorizeProjectAccess(request, projectId, v0)
+
+    if (
+      !projectAccess.authorized ||
+      !projectHasChat(projectAccess.project, chatId)
+    ) {
+      return forbiddenResponse()
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
       chatId: chatId,
-      ...(projectId && { projectId }), // Include projectId if provided
+      projectId,
     })
 
     // If a project was created/returned, associate it with the user's IP
@@ -27,7 +48,12 @@ export async function POST(request: NextRequest) {
       await associateProjectWithIP(forkedChat.projectId, userIP)
     }
 
-    return NextResponse.json(forkedChat)
+    const response = NextResponse.json(forkedChat)
+    if (forkedChat.projectId) {
+      addProjectOwnershipCookie(response, request, forkedChat.projectId)
+    }
+
+    return response
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()

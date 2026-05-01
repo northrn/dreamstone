@@ -96,7 +96,9 @@ export default function HomePage() {
 
     // Then fetch fresh data in the background
     try {
-      const response = await fetch(`/api/projects/${projectId}`)
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}`,
+      )
       if (response.ok) {
         const data = await response.json()
         const chatsData = data.chats || []

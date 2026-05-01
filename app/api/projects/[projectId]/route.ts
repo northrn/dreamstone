@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { authorizeProjectAccess } from '@/lib/authorization'
 
 export async function GET(
   request: NextRequest,
@@ -15,10 +16,12 @@ export async function GET(
       )
     }
 
-    // Get project details by ID
-    const response = await v0.projects.getById({ projectId })
+    const projectAccess = await authorizeProjectAccess(request, projectId, v0)
+    if (!projectAccess.authorized) {
+      return projectAccess.response
+    }
 
-    return NextResponse.json(response)
+    return NextResponse.json(projectAccess.project)
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {
