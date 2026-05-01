@@ -74,6 +74,8 @@ export async function getUserProjects(userIP: string): Promise<string[]> {
   }
 }
 
+export const isPersistentProjectOwnershipEnabled = Boolean(redis)
+
 // Check if rate limit is exceeded
 export async function checkRateLimit(identifier: string) {
   // If rate limiting is not enabled, always allow the request

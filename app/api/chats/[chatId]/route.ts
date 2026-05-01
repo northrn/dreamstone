@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import {
+  authorizeProjectAccess,
+  forbiddenResponse,
+  projectHasChat,
+} from '@/lib/authorization'
+
+async function authorizeChatAccess(
+  request: NextRequest,
+  v0: ReturnType<typeof createClient>,
+  projectId: string,
+  chatId: string,
+) {
+  const projectAccess = await authorizeProjectAccess(request, projectId, v0)
+
+  return projectAccess.authorized && projectHasChat(projectAccess.project, chatId)
+}
 
 export async function GET(
   request: NextRequest,
@@ -7,6 +23,7 @@ export async function GET(
 ) {
   try {
     const { chatId } = await params
+    const projectId = request.nextUrl.searchParams.get('projectId')
 
     if (!chatId) {
       return NextResponse.json(
@@ -15,9 +32,20 @@ export async function GET(
       )
     }
 
+    if (!projectId) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 },
+      )
+    }
+
     const v0 = createClient({
       apiKey: process.env.V0_API_KEY,
     })
+
+    if (!(await authorizeChatAccess(request, v0, projectId, chatId))) {
+      return forbiddenResponse()
+    }
 
     // Get chat details by ID
     const response = await v0.chats.getById({ chatId: chatId })
@@ -53,6 +81,7 @@ export async function DELETE(
 ) {
   try {
     const { chatId } = await params
+    const projectId = request.nextUrl.searchParams.get('projectId')
 
     if (!chatId) {
       return NextResponse.json(
@@ -61,9 +90,20 @@ export async function DELETE(
       )
     }
 
+    if (!projectId) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 },
+      )
+    }
+
     const v0 = createClient({
       apiKey: process.env.V0_API_KEY,
     })
+
+    if (!(await authorizeChatAccess(request, v0, projectId, chatId))) {
+      return forbiddenResponse()
+    }
 
     // Delete chat using v0 SDK
     await v0.chats.delete({ chatId })
@@ -98,6 +138,7 @@ export async function PATCH(
 ) {
   try {
     const { chatId } = await params
+    const projectId = request.nextUrl.searchParams.get('projectId')
     const { name } = await request.json()
 
     if (!chatId) {
@@ -114,9 +155,20 @@ export async function PATCH(
       )
     }
 
+    if (!projectId) {
+      return NextResponse.json(
+        { error: 'Project ID is required' },
+        { status: 400 },
+      )
+    }
+
     const v0 = createClient({
       apiKey: process.env.V0_API_KEY,
     })
+
+    if (!(await authorizeChatAccess(request, v0, projectId, chatId))) {
+      return forbiddenResponse()
+    }
 
     // Update chat name using v0 SDK
     const response = await v0.chats.update({

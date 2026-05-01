@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, getUserProjects, associateProjectWithIP } from '@/lib/rate-limiter'
+import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  addProjectOwnershipCookie,
+  ownedProjectIdsForRequest,
+} from '@/lib/authorization'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,12 +15,12 @@ export async function GET(request: NextRequest) {
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
     
-    // Get user's project IDs from Redis
-    const userProjectIds = await getUserProjects(userIP)
+    // Get project IDs associated with this requester.
+    const userProjectIds = await ownedProjectIdsForRequest(request)
     
     // Filter projects to only include those owned by this user
-    const userProjects = allProjects.filter((project: any) => 
-      userProjectIds.includes(project.id)
+    const userProjects = allProjects.filter((project: any) =>
+      userProjectIds.has(project.id),
     )
     
     return NextResponse.json({ data: userProjects })
@@ -68,7 +72,7 @@ export async function POST(request: NextRequest) {
       await associateProjectWithIP(project.id, userIP)
     }
 
-    return NextResponse.json(project)
+    return addProjectOwnershipCookie(NextResponse.json(project), request, project.id)
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

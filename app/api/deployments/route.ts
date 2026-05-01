@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  authorizeProjectAccess,
+  chatHasVersion,
+  forbiddenResponse,
+  projectHasChat,
+} from '@/lib/authorization'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +23,20 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    const projectAccess = await authorizeProjectAccess(request, projectId, v0)
+    if (!projectAccess.authorized) {
+      return projectAccess.response
+    }
+
+    if (!projectHasChat(projectAccess.project, chatId)) {
+      return forbiddenResponse()
+    }
+
+    const chat = await v0.chats.getById({ chatId })
+    if (!chatHasVersion(chat, versionId)) {
+      return forbiddenResponse()
     }
 
     // Create deployment using v0 SDK

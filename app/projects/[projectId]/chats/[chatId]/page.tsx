@@ -70,7 +70,9 @@ export default function ChatPage() {
 
   const loadProjectChats = async () => {
     try {
-      const response = await fetch(`/api/projects/${projectId}`)
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}`,
+      )
       if (response.ok) {
         const data = await response.json()
         const chatsData = data.chats || []
@@ -166,7 +168,9 @@ export default function ChatPage() {
 
     // Then fetch fresh data in the background
     try {
-      const response = await fetch(`/api/projects/${projectId}`)
+      const response = await fetch(
+        `/api/projects/${encodeURIComponent(projectId)}`,
+      )
       if (response.ok) {
         const data = await response.json()
         const chatsData = data.chats || []
@@ -203,9 +207,12 @@ export default function ChatPage() {
 
   const handleDeleteChat = async () => {
     try {
-      const response = await fetch(`/api/chats/${chatId}`, {
-        method: 'DELETE',
-      })
+      const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatId)}?projectId=${encodeURIComponent(projectId)}`,
+        {
+          method: 'DELETE',
+        },
+      )
 
       if (response.ok) {
         // Clear cached data for this project
@@ -227,13 +234,16 @@ export default function ChatPage() {
 
   const handleRenameChat = async (newName: string) => {
     try {
-      const response = await fetch(`/api/chats/${chatId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatId)}?projectId=${encodeURIComponent(projectId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: newName }),
         },
-        body: JSON.stringify({ name: newName }),
-      })
+      )
 
       if (response.ok) {
         // Update local chat data
@@ -259,9 +269,12 @@ export default function ChatPage() {
 
   const loadChatData = async () => {
     try {
-      const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
-        method: 'GET',
-      })
+      const response = await fetch(
+        `/api/chats/${encodeURIComponent(chatId)}?projectId=${encodeURIComponent(projectId)}`,
+        {
+          method: 'GET',
+        },
+      )
 
       if (response.ok) {
         const data = await response.json()
