@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac, timingSafeEqual } from 'crypto'
-import {
-  getUserIP,
-  getUserProjects,
-  isProjectAssociationStoreEnabled,
-} from './rate-limiter'
 
 const projectOwnershipCookie = 'v0_owned_projects'
 const cookieMaxAge = 60 * 60 * 24 * 30
@@ -69,10 +64,6 @@ export function addProjectOwnershipCookie(
   request: NextRequest,
   projectId: string,
 ) {
-  if (isProjectAssociationStoreEnabled()) {
-    return response
-  }
-
   const secret = signingSecret()
 
   if (!secret) {
@@ -98,31 +89,12 @@ export function addProjectOwnershipCookie(
   return response
 }
 
-export async function isProjectOwnedByRequest(
-  request: NextRequest,
-  projectId: string,
-) {
-  const userProjectIds = isProjectAssociationStoreEnabled()
-    ? await getUserProjects(getUserIP(request))
-    : []
-
-  return (
-    userProjectIds.includes(projectId) ||
-    readOwnedProjectsFromCookie(request).includes(projectId)
-  )
+export function isProjectOwnedByRequest(request: NextRequest, projectId: string) {
+  return readOwnedProjectsFromCookie(request).includes(projectId)
 }
 
-export async function ownedProjectIdsForRequest(request: NextRequest) {
-  const ownedProjectIds = new Set(readOwnedProjectsFromCookie(request))
-
-  if (isProjectAssociationStoreEnabled()) {
-    const persistedProjectIds = await getUserProjects(getUserIP(request))
-    for (const projectId of persistedProjectIds) {
-      ownedProjectIds.add(projectId)
-    }
-  }
-
-  return ownedProjectIds
+export function ownedProjectIdsForRequest(request: NextRequest) {
+  return new Set(readOwnedProjectsFromCookie(request))
 }
 
 export async function authorizeProjectAccess(
@@ -130,7 +102,7 @@ export async function authorizeProjectAccess(
   projectId: string,
   v0: { projects: { getById: (input: { projectId: string }) => Promise<any> } },
 ) {
-  if (!(await isProjectOwnedByRequest(request, projectId))) {
+  if (!isProjectOwnedByRequest(request, projectId)) {
     return { authorized: false as const, response: forbiddenResponse() }
   }
 
