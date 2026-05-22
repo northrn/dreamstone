@@ -11,7 +11,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ chatId: string }> },
 ) {
-  let owner = getRequestOwner(request)
+  let owner = getRequestOwner(request, { createIfMissing: false })
 
   try {
     const { chatId } = await params

@@ -54,11 +54,26 @@ export class OwnershipForbiddenError extends Error {
   }
 }
 
-export function getRequestOwner(request: NextRequest): RequestOwner {
+export function getRequestOwner(
+  request: NextRequest,
+  options?: { createIfMissing?: true },
+): RequestOwner
+export function getRequestOwner(
+  request: NextRequest,
+  options: { createIfMissing: false },
+): RequestOwner | undefined
+export function getRequestOwner(
+  request: NextRequest,
+  options: { createIfMissing?: boolean } = {},
+): RequestOwner | undefined {
   const cookieOwnerId = request.cookies.get(OWNER_COOKIE_NAME)?.value
 
   if (cookieOwnerId && OWNER_ID_PATTERN.test(cookieOwnerId)) {
     return { id: cookieOwnerId, shouldSetCookie: false }
+  }
+
+  if (options.createIfMissing === false) {
+    return undefined
   }
 
   return { id: randomUUID(), shouldSetCookie: true }
@@ -115,10 +130,12 @@ export async function associateProjectWithOwner(
 ) {
   ensureOwnershipStore()
 
-  await Promise.all([
-    redis!.sadd(ownerProjectsKey(owner.id), projectId),
-    redis!.set(projectOwnerKey(projectId), owner.id),
-  ])
+  await retryOwnershipWrite(() =>
+    Promise.all([
+      redis!.sadd(ownerProjectsKey(owner.id), projectId),
+      redis!.set(projectOwnerKey(projectId), owner.id),
+    ]),
+  )
 }
 
 export async function getOwnerProjects(owner: RequestOwner): Promise<string[]> {
@@ -130,9 +147,13 @@ export async function getOwnerProjects(owner: RequestOwner): Promise<string[]> {
 
 export async function requireProjectOwnership(
   projectId: string,
-  owner: RequestOwner,
+  owner: RequestOwner | undefined,
 ) {
   ensureOwnershipStore()
+
+  if (!owner) {
+    throw new OwnershipForbiddenError()
+  }
 
   const projectOwner = await redis!.get(projectOwnerKey(projectId))
 
@@ -143,10 +164,14 @@ export async function requireProjectOwnership(
 
 export async function requireChatOwnership(
   chatId: string,
-  owner: RequestOwner,
+  owner: RequestOwner | undefined,
   client: V0Client,
 ) {
   ensureOwnershipStore()
+
+  if (!owner) {
+    throw new OwnershipForbiddenError()
+  }
 
   const chat = await client.chats.getById({ chatId })
   let projectId = chat.projectId
@@ -190,4 +215,18 @@ function ownerProjectsKey(ownerId: string) {
 
 function projectOwnerKey(projectId: string) {
   return `project_owner:${projectId}`
+}
+
+async function retryOwnershipWrite<T>(write: () => Promise<T>) {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await write()
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError
 }

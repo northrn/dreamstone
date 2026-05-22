@@ -1,6 +1,9 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit } from '@/lib/rate-limiter'
+import {
+  checkRateLimit,
+  getNetworkRateLimitIdentifier,
+} from '@/lib/rate-limiter'
 import {
   associateProjectWithOwner,
   ensureOwnershipStore,
@@ -35,8 +38,13 @@ export async function POST(request: NextRequest) {
     ensureOwnershipStore()
 
     // Check rate limit for ALL generations (both new and existing chats)
-    const userIdentifier = `owner:${owner.id}`
-    const rateLimitResult = await checkRateLimit(userIdentifier)
+    const ownerRateLimitResult = await checkRateLimit(`owner:${owner.id}`)
+    const networkRateLimitResult = await checkRateLimit(
+      getNetworkRateLimitIdentifier(request),
+    )
+    const rateLimitResult = ownerRateLimitResult.success
+      ? networkRateLimitResult
+      : ownerRateLimitResult
 
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()

@@ -29,6 +29,15 @@ if (isRateLimitingEnabled) {
   })
 }
 
+export function getNetworkRateLimitIdentifier(request: Request) {
+  const forwarded = request.headers.get('x-forwarded-for')
+  const realIp = request.headers.get('x-real-ip')
+  const cfConnectingIp = request.headers.get('cf-connecting-ip')
+  const ip = forwarded?.split(',')[0]?.trim() || realIp || cfConnectingIp
+
+  return `network:${ip || 'unknown'}`
+}
+
 // Check if rate limit is exceeded
 export async function checkRateLimit(identifier: string) {
   // Ownership checks require Redis before generation, but keep rate limiting

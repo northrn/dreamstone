@@ -10,9 +10,13 @@ import {
 } from '@/lib/ownership'
 
 export async function GET(request: NextRequest) {
-  let owner = getRequestOwner(request)
+  let owner = getRequestOwner(request, { createIfMissing: false })
 
   try {
+    if (!owner) {
+      return NextResponse.json({ data: [] })
+    }
+
     // Get project IDs owned by this anonymous browser session.
     const ownerProjectIds = await getOwnerProjects(owner)
 
