@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  getRequestOwner,
+  jsonWithOwnerCookie,
+  ownershipErrorResponse,
+  requireProjectOwnership,
+} from '@/lib/ownership'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  let owner = getRequestOwner(request)
+
   try {
     const { projectId } = await params
 
@@ -15,11 +23,18 @@ export async function GET(
       )
     }
 
+    await requireProjectOwnership(projectId, owner)
+
     // Get project details by ID
     const response = await v0.projects.getById({ projectId })
 
-    return NextResponse.json(response)
+    return jsonWithOwnerCookie(owner, response)
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     // Check if it's an API key error
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -40,6 +55,9 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ error: 'Failed to get project' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to get project' },
+      { status: 500 },
+    )
   }
 }

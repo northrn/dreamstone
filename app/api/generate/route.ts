@@ -1,8 +1,19 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { checkRateLimit } from '@/lib/rate-limiter'
+import {
+  associateProjectWithOwner,
+  ensureOwnershipStore,
+  getRequestOwner,
+  jsonWithOwnerCookie,
+  ownershipErrorResponse,
+  requireChatOwnership,
+  requireProjectOwnership,
+} from '@/lib/ownership'
 
 export async function POST(request: NextRequest) {
+  let owner = getRequestOwner(request)
+
   try {
     const {
       message,
@@ -21,35 +32,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    ensureOwnershipStore()
+
     // Check rate limit for ALL generations (both new and existing chats)
-    const userIdentifier = getUserIdentifier(request)
-    const userIP = getUserIP(request)
+    const userIdentifier = `owner:${owner.id}`
     const rateLimitResult = await checkRateLimit(userIdentifier)
-    
+
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()
-      return NextResponse.json(
-        { 
+      return jsonWithOwnerCookie(
+        owner,
+        {
           error: 'RATE_LIMIT_EXCEEDED',
           message: `You've reached the limit of 3 generations per 12 hours. Please try again after ${resetTime}.`,
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
-          resetTime: rateLimitResult.resetTime.toISOString()
+          resetTime: rateLimitResult.resetTime.toISOString(),
         },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit.toString(),
             'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
             'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          }
-        }
+          },
+        },
       )
     }
 
     let response
 
     if (chatId) {
+      await requireChatOwnership(chatId, owner, v0)
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,9 +77,14 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId) {
+        await requireProjectOwnership(projectId, owner)
+      }
+
       // Create new chat
       response = await v0.chats.create({
-        system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
+        system:
+          'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
         message: message.trim(),
         modelConfiguration: {
           modelId: modelId,
@@ -75,11 +95,15 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
 
-      // If a project was created/returned, associate it with the user's IP
-      if (response.projectId) {
-        await associateProjectWithIP(response.projectId, userIP)
+      // If a project was created/returned, associate it with this browser session.
+      const responseProjectId =
+        response.projectId ??
+        (await v0.projects.getByChatId({ chatId: response.id })).id
+
+      if (responseProjectId) {
+        await associateProjectWithOwner(responseProjectId, owner)
       }
-      
+
       // Rename the new chat to "Main" for new projects
       try {
         await v0.chats.update({
@@ -91,8 +115,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(response)
+    return jsonWithOwnerCookie(owner, response)
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     // Check if it's an API key error
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
