@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  getRequestOwner,
+  jsonWithOwnerCookie,
+  ownershipErrorResponse,
+  requireChatOwnership,
+  requireProjectOwnership,
+} from '@/lib/ownership'
 
 export async function POST(request: NextRequest) {
+  let owner = getRequestOwner(request)
+
   try {
     const { projectId, chatId, versionId } = await request.json()
 
@@ -19,6 +28,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    await requireProjectOwnership(projectId, owner)
+    const { chat, projectId: chatProjectId } = await requireChatOwnership(
+      chatId,
+      owner,
+      v0,
+    )
+
+    if (chatProjectId !== projectId) {
+      return jsonWithOwnerCookie(
+        owner,
+        { error: 'Chat does not belong to the requested project' },
+        { status: 403 },
+      )
+    }
+
+    if (chat.latestVersion?.id && chat.latestVersion.id !== versionId) {
+      return jsonWithOwnerCookie(
+        owner,
+        { error: 'Version does not match the latest owned chat version' },
+        { status: 403 },
+      )
+    }
+
     // Create deployment using v0 SDK
     try {
       const result = await v0.deployments.create({
@@ -27,7 +59,7 @@ export async function POST(request: NextRequest) {
         versionId,
       })
 
-      return NextResponse.json(result)
+      return jsonWithOwnerCookie(owner, result)
     } catch (deployError) {
       // Check if the error is about missing Vercel project ID
       if (
@@ -52,7 +84,7 @@ export async function POST(request: NextRequest) {
             versionId,
           })
 
-          return NextResponse.json(result)
+          return jsonWithOwnerCookie(owner, result)
         } catch (vercelError) {
           // If Vercel project creation fails, return that error
           throw new Error(
@@ -65,6 +97,11 @@ export async function POST(request: NextRequest) {
       throw deployError
     }
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
 

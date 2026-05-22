@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import {
+  getRequestOwner,
+  jsonWithOwnerCookie,
+  ownershipErrorResponse,
+  requireChatOwnership,
+} from '@/lib/ownership'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ chatId: string }> },
 ) {
+  let owner = getRequestOwner(request, { createIfMissing: false })
+
   try {
     const { chatId } = await params
 
@@ -19,11 +27,16 @@ export async function GET(
       apiKey: process.env.V0_API_KEY,
     })
 
-    // Get chat details by ID
-    const response = await v0.chats.getById({ chatId: chatId })
+    // Get chat details only after verifying this session owns its project.
+    const { chat: response } = await requireChatOwnership(chatId, owner, v0)
 
-    return NextResponse.json(response)
+    return jsonWithOwnerCookie(owner, response)
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
       if (
@@ -51,6 +64,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ chatId: string }> },
 ) {
+  let owner = getRequestOwner(request)
+
   try {
     const { chatId } = await params
 
@@ -65,11 +80,18 @@ export async function DELETE(
       apiKey: process.env.V0_API_KEY,
     })
 
+    await requireChatOwnership(chatId, owner, v0)
+
     // Delete chat using v0 SDK
     await v0.chats.delete({ chatId })
 
-    return NextResponse.json({ success: true })
+    return jsonWithOwnerCookie(owner, { success: true })
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     // Check if it's an API key error
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -96,6 +118,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ chatId: string }> },
 ) {
+  let owner = getRequestOwner(request)
+
   try {
     const { chatId } = await params
     const { name } = await request.json()
@@ -118,14 +142,21 @@ export async function PATCH(
       apiKey: process.env.V0_API_KEY,
     })
 
+    await requireChatOwnership(chatId, owner, v0)
+
     // Update chat name using v0 SDK
     const response = await v0.chats.update({
       chatId: chatId,
       name: name.trim(),
     })
 
-    return NextResponse.json(response)
+    return jsonWithOwnerCookie(owner, response)
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
       if (

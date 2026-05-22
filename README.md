@@ -7,24 +7,27 @@ A Next.js application showcasing the v0 Platform API. Build AI-powered apps with
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    pnpm install
    ```
 
 2. **Configure environment:**
    Create a `.env.local` file in the root directory:
+
    ```env
    V0_API_KEY=your_api_key_here
-   
-   # Optional: For rate limiting (if not provided, rate limiting is disabled)
+
+   # Required: For anonymous project ownership and rate limiting
    KV_REST_API_URL=your_kv_rest_api_url
    KV_REST_API_TOKEN=your_kv_rest_api_token
    ```
-   
+
    - Get your v0 API key from [v0.dev/settings](https://v0.dev/settings)
-   - Optionally get your Upstash Redis credentials from [upstash.com](https://upstash.com) for rate limiting
+   - Get your Upstash Redis credentials from [upstash.com](https://upstash.com) for anonymous project ownership and rate limiting
 
 3. **Run development server:**
+
    ```bash
    pnpm dev
    ```
@@ -40,6 +43,7 @@ A Next.js application showcasing the v0 Platform API. Build AI-powered apps with
 - **One-Click Deployment**: Deploy generated apps directly to Vercel
 - **File Attachments**: Upload images and files to enhance your prompts
 - **Voice Input**: Use speech-to-text for hands-free prompt creation
+- **Anonymous Project Ownership**: Browser sessions can only access projects and chats they created
 - **Rate Limiting**: Built-in rate limiting (3 AI generations per 12 hours) to prevent abuse
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
 - **Session Caching**: Improved performance with intelligent caching of projects and chats
@@ -69,13 +73,13 @@ A Next.js application showcasing the v0 Platform API. Build AI-powered apps with
 
 ## Rate Limiting
 
-This application implements optional rate limiting to prevent abuse and ensure fair usage:
+This application uses Upstash Redis for anonymous browser-session ownership and rate limiting:
 
-- **Limit:** 3 AI generations per 12 hours per IP address
+- **Limit:** 3 AI generations per 12 hours per anonymous browser session
 - **What counts as 1 generation:** Each call to `v0.chats.create()` or `v0.chats.sendMessage()`
 - **Scope:** Applies to all AI generation requests regardless of chat type
 - **Implementation:** Uses Upstash Redis with a sliding window algorithm
-- **Optional:** If Upstash credentials are not provided, rate limiting is disabled
+- **Required:** If Upstash credentials are not provided, project/chat/deployment routes reject requests because ownership cannot be verified safely
 - **Fallback:** If rate limiting service is unavailable, requests are allowed (fail-open strategy)
 
 When the rate limit is exceeded, users receive a 429 status code with information about when they can try again.
@@ -106,11 +110,11 @@ When the rate limit is exceeded, users receive a 429 status code with informatio
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `V0_API_KEY` | Yes | Your v0 Platform API key from [v0.dev/settings](https://v0.dev/settings) |
-| `KV_REST_API_URL` | No | Upstash Redis REST URL for rate limiting (if not provided, rate limiting is disabled) |
-| `KV_REST_API_TOKEN` | No | Upstash Redis REST token for rate limiting (if not provided, rate limiting is disabled) |
+| Variable            | Required | Description                                                                |
+| ------------------- | -------- | -------------------------------------------------------------------------- |
+| `V0_API_KEY`        | Yes      | Your v0 Platform API key from [v0.dev/settings](https://v0.dev/settings)   |
+| `KV_REST_API_URL`   | Yes      | Upstash Redis REST URL for anonymous project ownership and rate limiting   |
+| `KV_REST_API_TOKEN` | Yes      | Upstash Redis REST token for anonymous project ownership and rate limiting |
 
 ## Development Commands
 

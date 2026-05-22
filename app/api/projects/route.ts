@@ -1,26 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, getUserProjects, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  associateProjectWithOwner,
+  ensureOwnershipStore,
+  getOwnerProjects,
+  getRequestOwner,
+  jsonWithOwnerCookie,
+  ownershipErrorResponse,
+} from '@/lib/ownership'
 
 export async function GET(request: NextRequest) {
+  let owner = getRequestOwner(request, { createIfMissing: false })
+
   try {
-    // Get user's IP
-    const userIP = getUserIP(request)
-    
+    if (!owner) {
+      return NextResponse.json({ data: [] })
+    }
+
+    // Get project IDs owned by this anonymous browser session.
+    const ownerProjectIds = await getOwnerProjects(owner)
+
     // Get all projects from v0
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
-    
-    // Get user's project IDs from Redis
-    const userProjectIds = await getUserProjects(userIP)
-    
-    // Filter projects to only include those owned by this user
-    const userProjects = allProjects.filter((project: any) => 
-      userProjectIds.includes(project.id)
+
+    // Filter projects to only include those owned by this session
+    const userProjects = allProjects.filter((project: any) =>
+      ownerProjectIds.includes(project.id),
     )
-    
-    return NextResponse.json({ data: userProjects })
+
+    return jsonWithOwnerCookie(owner, { data: userProjects })
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     // Check if it's an API key error
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -44,6 +59,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let owner = getRequestOwner(request)
+
   try {
     const body = await request.json()
     const { name } = body
@@ -55,21 +72,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
+    ensureOwnershipStore()
 
     // Create project using v0 SDK
     const project = await v0.projects.create({
       name: name.trim(),
     })
 
-    // Associate the project with the user's IP
+    // Associate the project with the anonymous browser session
     if (project.id) {
-      await associateProjectWithIP(project.id, userIP)
+      await associateProjectWithOwner(project.id, owner)
     }
 
-    return NextResponse.json(project)
+    return jsonWithOwnerCookie(owner, project)
   } catch (error) {
+    const ownershipResponse = ownershipErrorResponse(error, owner)
+    if (ownershipResponse) {
+      return ownershipResponse
+    }
+
     // Check if it's an API key error
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
