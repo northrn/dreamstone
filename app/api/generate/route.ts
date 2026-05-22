@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
 
       if (responseProjectId) {
         await associateProjectWithOwner(responseProjectId, owner)
+        response = { ...response, projectId: responseProjectId }
       }
 
       // Rename the new chat to "Main" for new projects

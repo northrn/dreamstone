@@ -30,6 +30,11 @@ if (isRateLimitingEnabled) {
 }
 
 export function getNetworkRateLimitIdentifier(request: Request) {
+  // Forwarding headers are only trustworthy when the hosting platform owns them.
+  if (process.env.VERCEL !== '1') {
+    return 'network:unknown'
+  }
+
   const forwarded = request.headers.get('x-forwarded-for')
   const realIp = request.headers.get('x-real-ip')
   const cfConnectingIp = request.headers.get('cf-connecting-ip')
