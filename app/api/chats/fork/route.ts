@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  requireChatProjectAccess,
+  requireProjectAccess,
+} from '@/lib/project-access'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +15,18 @@ export async function POST(request: NextRequest) {
         { error: 'Chat ID is required' },
         { status: 400 },
       )
+    }
+
+    const sourceAccess = await requireChatProjectAccess(request, chatId)
+    if (!sourceAccess.allowed) {
+      return sourceAccess.response
+    }
+
+    if (projectId) {
+      const targetAccess = await requireProjectAccess(request, projectId)
+      if (!targetAccess.allowed) {
+        return targetAccess.response
+      }
     }
 
     // Get user's IP

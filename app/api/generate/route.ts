@@ -1,6 +1,15 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  checkRateLimit,
+  getUserIdentifier,
+  getUserIP,
+  associateProjectWithIP,
+} from '@/lib/rate-limiter'
+import {
+  requireChatProjectAccess,
+  requireProjectAccess,
+} from '@/lib/project-access'
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,31 +34,36 @@ export async function POST(request: NextRequest) {
     const userIdentifier = getUserIdentifier(request)
     const userIP = getUserIP(request)
     const rateLimitResult = await checkRateLimit(userIdentifier)
-    
+
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()
       return NextResponse.json(
-        { 
+        {
           error: 'RATE_LIMIT_EXCEEDED',
           message: `You've reached the limit of 3 generations per 12 hours. Please try again after ${resetTime}.`,
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
-          resetTime: rateLimitResult.resetTime.toISOString()
+          resetTime: rateLimitResult.resetTime.toISOString(),
         },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit.toString(),
             'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
             'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          }
-        }
+          },
+        },
       )
     }
 
     let response
 
     if (chatId) {
+      const chatAccess = await requireChatProjectAccess(request, chatId)
+      if (!chatAccess.allowed) {
+        return chatAccess.response
+      }
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,9 +76,17 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId) {
+        const projectAccess = await requireProjectAccess(request, projectId)
+        if (!projectAccess.allowed) {
+          return projectAccess.response
+        }
+      }
+
       // Create new chat
       response = await v0.chats.create({
-        system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
+        system:
+          'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
         message: message.trim(),
         modelConfiguration: {
           modelId: modelId,
@@ -79,7 +101,7 @@ export async function POST(request: NextRequest) {
       if (response.projectId) {
         await associateProjectWithIP(response.projectId, userIP)
       }
-      
+
       // Rename the new chat to "Main" for new projects
       try {
         await v0.chats.update({
