@@ -1,12 +1,8 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
+import { checkRateLimit, getUserIdentifier } from '@/lib/rate-limiter'
 import {
-  checkRateLimit,
-  getUserIdentifier,
-  getUserIP,
-  associateProjectWithIP,
-} from '@/lib/rate-limiter'
-import {
+  grantProjectAccess,
   requireChatProjectAccess,
   requireProjectAccess,
 } from '@/lib/project-access'
@@ -30,9 +26,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (chatId) {
+      const chatAccess = await requireChatProjectAccess(request, chatId)
+      if (!chatAccess.allowed) {
+        return chatAccess.response
+      }
+    } else if (projectId) {
+      const projectAccess = await requireProjectAccess(request, projectId)
+      if (!projectAccess.allowed) {
+        return projectAccess.response
+      }
+    }
+
     // Check rate limit for ALL generations (both new and existing chats)
     const userIdentifier = getUserIdentifier(request)
-    const userIP = getUserIP(request)
     const rateLimitResult = await checkRateLimit(userIdentifier)
 
     if (!rateLimitResult.success) {
@@ -59,11 +66,6 @@ export async function POST(request: NextRequest) {
     let response
 
     if (chatId) {
-      const chatAccess = await requireChatProjectAccess(request, chatId)
-      if (!chatAccess.allowed) {
-        return chatAccess.response
-      }
-
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -76,13 +78,6 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
-      if (projectId) {
-        const projectAccess = await requireProjectAccess(request, projectId)
-        if (!projectAccess.allowed) {
-          return projectAccess.response
-        }
-      }
-
       // Create new chat
       response = await v0.chats.create({
         system:
@@ -97,11 +92,6 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
 
-      // If a project was created/returned, associate it with the user's IP
-      if (response.projectId) {
-        await associateProjectWithIP(response.projectId, userIP)
-      }
-
       // Rename the new chat to "Main" for new projects
       try {
         await v0.chats.update({
@@ -113,7 +103,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(response)
+    const jsonResponse = NextResponse.json(response)
+
+    if (response.projectId) {
+      grantProjectAccess(request, jsonResponse, response.projectId)
+    }
+
+    return jsonResponse
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

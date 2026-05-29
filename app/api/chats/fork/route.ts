@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
 import {
+  grantProjectAccess,
   requireChatProjectAccess,
   requireProjectAccess,
 } from '@/lib/project-access'
@@ -29,21 +29,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
-
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
       chatId: chatId,
       ...(projectId && { projectId }), // Include projectId if provided
     })
 
-    // If a project was created/returned, associate it with the user's IP
+    const response = NextResponse.json(forkedChat)
+
     if (forkedChat.projectId) {
-      await associateProjectWithIP(forkedChat.projectId, userIP)
+      grantProjectAccess(request, response, forkedChat.projectId)
     }
 
-    return NextResponse.json(forkedChat)
+    return response
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
