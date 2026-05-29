@@ -3,10 +3,16 @@ import { v0 } from 'v0-sdk'
 import {
   requireChatProjectAccess,
   requireProjectAccess,
+  requireSameOriginRequest,
 } from '@/lib/project-access'
 
 export async function POST(request: NextRequest) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { projectId, chatId, versionId } = await request.json()
 
     if (!projectId || !chatId || !versionId) {

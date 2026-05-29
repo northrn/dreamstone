@@ -19,6 +19,10 @@ function notFoundResponse() {
   return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 }
 
+function invalidOriginResponse() {
+  return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 })
+}
+
 function signingSecret() {
   return process.env.V0_API_KEY
 }
@@ -131,6 +135,26 @@ export function grantProjectAccess(
   })
 
   return response
+}
+
+export function requireSameOriginRequest(
+  request: Request,
+): ProjectAccessResult {
+  if (request.headers.get('sec-fetch-site') === 'cross-site') {
+    return { allowed: false, response: invalidOriginResponse() }
+  }
+
+  const origin = request.headers.get('origin')
+
+  if (!origin) {
+    return { allowed: true }
+  }
+
+  if (origin === new URL(request.url).origin) {
+    return { allowed: true }
+  }
+
+  return { allowed: false, response: invalidOriginResponse() }
 }
 
 export async function requireProjectAccess(

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getProjectAccessIds, grantProjectAccess } from '@/lib/project-access'
+import {
+  getProjectAccessIds,
+  grantProjectAccess,
+  requireSameOriginRequest,
+} from '@/lib/project-access'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,6 +45,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const body = await request.json()
     const { name } = body
 

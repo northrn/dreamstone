@@ -7,6 +7,7 @@ import {
   grantProjectAccess,
   requireChatProjectAccess,
   requireProjectAccess,
+  requireSameOriginRequest,
 } from './project-access'
 
 vi.mock('v0-sdk', () => ({
@@ -95,6 +96,43 @@ describe('project access cookies', () => {
 
     const result = await requireProjectAccess(request, 'project-1')
     expect(result.allowed).toBe(false)
+  })
+
+  it('rejects cross-site mutating requests before they can set access cookies', () => {
+    const result = requireSameOriginRequest(
+      new Request('https://example.com/api/projects', {
+        method: 'POST',
+        headers: {
+          origin: 'https://attacker.example',
+          'sec-fetch-site': 'cross-site',
+        },
+      }),
+    )
+
+    expect(result.allowed).toBe(false)
+    if (!result.allowed) {
+      expect(result.response.status).toBe(403)
+    }
+  })
+
+  it('allows same-origin and non-browser mutating requests', () => {
+    expect(
+      requireSameOriginRequest(
+        new Request('https://example.com/api/projects', {
+          method: 'POST',
+          headers: {
+            origin: 'https://example.com',
+            'sec-fetch-site': 'same-origin',
+          },
+        }),
+      ).allowed,
+    ).toBe(true)
+
+    expect(
+      requireSameOriginRequest(
+        new Request('https://example.com/api/projects', { method: 'POST' }),
+      ).allowed,
+    ).toBe(true)
   })
 
   it('requires the chat project to be present in the signed access cookie', async () => {

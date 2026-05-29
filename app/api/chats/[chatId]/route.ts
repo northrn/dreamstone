@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
-import { requireChatProjectAccess } from '@/lib/project-access'
+import {
+  requireChatProjectAccess,
+  requireSameOriginRequest,
+} from '@/lib/project-access'
 
 export async function GET(
   request: NextRequest,
@@ -58,6 +61,11 @@ export async function DELETE(
   { params }: { params: Promise<{ chatId: string }> },
 ) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { chatId } = await params
 
     if (!chatId) {
@@ -108,6 +116,11 @@ export async function PATCH(
   { params }: { params: Promise<{ chatId: string }> },
 ) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { chatId } = await params
 
     if (!chatId) {

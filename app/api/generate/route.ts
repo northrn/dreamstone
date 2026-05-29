@@ -5,10 +5,16 @@ import {
   grantProjectAccess,
   requireChatProjectAccess,
   requireProjectAccess,
+  requireSameOriginRequest,
 } from '@/lib/project-access'
 
 export async function POST(request: NextRequest) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const {
       message,
       chatId,
