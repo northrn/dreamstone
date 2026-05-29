@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import {
+  requireChatProjectAccess,
+  requireSameOriginRequest,
+} from '@/lib/project-access'
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +17,11 @@ export async function GET(
         { error: 'Chat ID is required' },
         { status: 400 },
       )
+    }
+
+    const chatAccess = await requireChatProjectAccess(request, chatId)
+    if (!chatAccess.allowed) {
+      return chatAccess.response
     }
 
     const v0 = createClient({
@@ -52,6 +61,11 @@ export async function DELETE(
   { params }: { params: Promise<{ chatId: string }> },
 ) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { chatId } = await params
 
     if (!chatId) {
@@ -59,6 +73,11 @@ export async function DELETE(
         { error: 'Chat ID is required' },
         { status: 400 },
       )
+    }
+
+    const chatAccess = await requireChatProjectAccess(request, chatId)
+    if (!chatAccess.allowed) {
+      return chatAccess.response
     }
 
     const v0 = createClient({
@@ -97,8 +116,12 @@ export async function PATCH(
   { params }: { params: Promise<{ chatId: string }> },
 ) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { chatId } = await params
-    const { name } = await request.json()
 
     if (!chatId) {
       return NextResponse.json(
@@ -106,6 +129,13 @@ export async function PATCH(
         { status: 400 },
       )
     }
+
+    const chatAccess = await requireChatProjectAccess(request, chatId)
+    if (!chatAccess.allowed) {
+      return chatAccess.response
+    }
+
+    const { name } = await request.json()
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return NextResponse.json(

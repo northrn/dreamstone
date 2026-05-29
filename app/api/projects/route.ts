@@ -1,24 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, getUserProjects, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  getProjectAccessIds,
+  grantProjectAccess,
+  requireSameOriginRequest,
+} from '@/lib/project-access'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user's IP
-    const userIP = getUserIP(request)
-    
     // Get all projects from v0
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
-    
-    // Get user's project IDs from Redis
-    const userProjectIds = await getUserProjects(userIP)
-    
+
+    const userProjectIds = getProjectAccessIds(request)
+
     // Filter projects to only include those owned by this user
-    const userProjects = allProjects.filter((project: any) => 
-      userProjectIds.includes(project.id)
+    const userProjects = allProjects.filter((project: any) =>
+      userProjectIds.includes(project.id),
     )
-    
+
     return NextResponse.json({ data: userProjects })
   } catch (error) {
     // Check if it's an API key error
@@ -45,6 +45,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const body = await request.json()
     const { name } = body
 
@@ -55,20 +60,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
-
     // Create project using v0 SDK
     const project = await v0.projects.create({
       name: name.trim(),
     })
 
-    // Associate the project with the user's IP
+    const response = NextResponse.json(project)
+
     if (project.id) {
-      await associateProjectWithIP(project.id, userIP)
+      grantProjectAccess(request, response, project.id)
     }
 
-    return NextResponse.json(project)
+    return response
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

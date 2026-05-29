@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  requireChatProjectAccess,
+  requireProjectAccess,
+  requireSameOriginRequest,
+} from '@/lib/project-access'
 
 export async function POST(request: NextRequest) {
   try {
+    const originAccess = requireSameOriginRequest(request)
+    if (!originAccess.allowed) {
+      return originAccess.response
+    }
+
     const { projectId, chatId, versionId } = await request.json()
 
     if (!projectId || !chatId || !versionId) {
@@ -15,6 +25,23 @@ export async function POST(request: NextRequest) {
             versionId: !!versionId,
           },
         },
+        { status: 400 },
+      )
+    }
+
+    const projectAccess = await requireProjectAccess(request, projectId)
+    if (!projectAccess.allowed) {
+      return projectAccess.response
+    }
+
+    const chatAccess = await requireChatProjectAccess(request, chatId)
+    if (!chatAccess.allowed) {
+      return chatAccess.response
+    }
+
+    if (chatAccess.projectId !== projectId) {
+      return NextResponse.json(
+        { error: 'Chat does not belong to project' },
         { status: 400 },
       )
     }
