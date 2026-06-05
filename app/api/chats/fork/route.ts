@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  associateProjectWithRequest,
+  forbiddenResponse,
+  ownsProject,
+  projectIdForChat,
+  projectIdFromResource,
+} from '@/lib/project-ownership'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,8 +19,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
+    const sourceChat = await v0.chats.getById({ chatId })
+    const sourceProjectId = await projectIdForChat(v0, chatId, sourceChat)
+
+    if (!sourceProjectId || !(await ownsProject(request, sourceProjectId))) {
+      return forbiddenResponse()
+    }
+
+    if (projectId && !(await ownsProject(request, projectId))) {
+      return forbiddenResponse()
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
@@ -23,8 +37,14 @@ export async function POST(request: NextRequest) {
     })
 
     // If a project was created/returned, associate it with the user's IP
-    if (forkedChat.projectId) {
-      await associateProjectWithIP(forkedChat.projectId, userIP)
+    const forkedProjectId = projectIdFromResource(forkedChat)
+
+    if (forkedProjectId) {
+      const responseBody = { ...forkedChat, projectId: forkedProjectId }
+      const jsonResponse = NextResponse.json(responseBody)
+      await associateProjectWithRequest(request, jsonResponse, forkedProjectId)
+
+      return jsonResponse
     }
 
     return NextResponse.json(forkedChat)

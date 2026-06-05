@@ -99,7 +99,7 @@ interface PromptComponentProps {
     prompt: string,
     settings: { modelId: string; imageGenerations: boolean; thinking: boolean },
     attachments?: Attachment[],
-  ) => Promise<void>
+  ) => Promise<boolean>
 
   // Loading state from parent
   isLoading: boolean
@@ -145,6 +145,7 @@ export default function PromptComponent({
   const router = useRouter()
   const { settings } = useSettings()
   const [prompt, setPrompt] = useState(initialPrompt)
+  const [hasLoadedDraft, setHasLoadedDraft] = useState(false)
   const [isPromptExpanded, setIsPromptExpanded] = useState(initialExpanded)
   const [shouldAnimate, setShouldAnimate] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -189,12 +190,16 @@ export default function PromptComponent({
       } catch (error) {
         // Silently handle sessionStorage errors
         console.warn('Failed to load draft from sessionStorage:', error)
+      } finally {
+        setHasLoadedDraft(true)
       }
     }
   }, [initialPrompt])
 
   // Save prompt to sessionStorage whenever it changes
   useEffect(() => {
+    if (!hasLoadedDraft) return
+
     if (typeof window !== 'undefined') {
       try {
         if (prompt) {
@@ -208,22 +213,28 @@ export default function PromptComponent({
         console.warn('Failed to save prompt to sessionStorage:', error)
       }
     }
-  }, [prompt])
+  }, [hasLoadedDraft, prompt])
 
   // Save attachments to sessionStorage whenever they change
   useEffect(() => {
+    if (!hasLoadedDraft) return
+
     if (typeof window !== 'undefined') {
       try {
-        sessionStorage.setItem(
-          ATTACHMENTS_STORAGE_KEY,
-          JSON.stringify(attachments),
-        )
+        if (attachments.length > 0) {
+          sessionStorage.setItem(
+            ATTACHMENTS_STORAGE_KEY,
+            JSON.stringify(attachments),
+          )
+        } else {
+          sessionStorage.removeItem(ATTACHMENTS_STORAGE_KEY)
+        }
       } catch (error) {
         // Silently handle sessionStorage errors
         console.warn('Failed to save attachments to sessionStorage:', error)
       }
     }
-  }, [attachments])
+  }, [attachments, hasLoadedDraft])
 
   // Clear sessionStorage function
   const clearDraft = () => {
@@ -307,7 +318,7 @@ export default function PromptComponent({
           setIsDragging(false)
           setIsOverPrompt(false)
         }
-        
+
         if (isPromptExpanded) {
           // If prompt is expanded, collapse it
           setIsPromptExpanded(false)
@@ -328,14 +339,21 @@ export default function PromptComponent({
       if (e.key.length === 1) {
         setShouldAnimate(true)
         setIsPromptExpanded(true)
-        // Add the typed character to prompt
-        setPrompt(e.key)
+        // Preserve any restored draft while reopening the prompt.
+        setPrompt((currentPrompt) => `${currentPrompt}${e.key}`)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isPromptExpanded, isLoading, router, currentProjectId, isDialogOpen, isDragging])
+  }, [
+    isPromptExpanded,
+    isLoading,
+    router,
+    currentProjectId,
+    isDialogOpen,
+    isDragging,
+  ])
 
   // Listen for drag operations being cancelled (e.g. by pressing Escape)
   useEffect(() => {
@@ -354,7 +372,7 @@ export default function PromptComponent({
     // Listen for various ways the drag can end
     document.addEventListener('dragend', handleGlobalDragEnd)
     document.addEventListener('mouseup', handleMouseUp)
-    
+
     return () => {
       document.removeEventListener('dragend', handleGlobalDragEnd)
       document.removeEventListener('mouseup', handleMouseUp)
@@ -375,7 +393,7 @@ export default function PromptComponent({
     setShouldAnimate(false) // Reset animation state
 
     try {
-      await onSubmit(
+      const submitted = await onSubmit(
         prompt.trim(),
         {
           modelId: settings.model,
@@ -384,6 +402,9 @@ export default function PromptComponent({
         },
         attachments,
       )
+
+      if (!submitted) return
+
       // Clear the prompt and attachments after successful submission
       setPrompt('')
       setAttachments([])
@@ -424,15 +445,18 @@ export default function PromptComponent({
 
   const removeAttachment = (index: number) => {
     const attachmentToRemove = attachments[index]
-    
+
     // Clear preview if it's showing the attachment being removed
-    if (previewState.isVisible && previewState.src === attachmentToRemove?.url) {
-      setPreviewState(prev => ({
+    if (
+      previewState.isVisible &&
+      previewState.src === attachmentToRemove?.url
+    ) {
+      setPreviewState((prev) => ({
         ...prev,
         isVisible: false,
       }))
     }
-    
+
     setAttachments(attachments.filter((_, i) => i !== index))
   }
 
@@ -440,11 +464,11 @@ export default function PromptComponent({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     // Check if we have files being dragged
     if (e.dataTransfer.types.includes('Files')) {
       setIsDragging(true)
-      
+
       // Check if entering the prompt container specifically
       const target = e.currentTarget as HTMLElement
       if (target.dataset.dragContainer === 'prompt') {
@@ -456,15 +480,20 @@ export default function PromptComponent({
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    
+
     // For prompt container, check if leaving to go to overlay
     const target = e.currentTarget as HTMLElement
     if (target.dataset.dragContainer === 'prompt') {
       const rect = target.getBoundingClientRect()
       const x = e.clientX
       const y = e.clientY
-      
-      if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+
+      if (
+        x < rect.left ||
+        x >= rect.right ||
+        y < rect.top ||
+        y >= rect.bottom
+      ) {
         setIsOverPrompt(false)
       }
     }
@@ -545,10 +574,10 @@ export default function PromptComponent({
         >
           {/* Main prompt container */}
           <div className="mx-auto max-w-4xl px-3 sm:px-6 pb-4 sm:pb-8 pointer-events-auto">
-            <div 
+            <div
               className={`relative bg-card/80 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden border transition-all duration-200 ${
-                isDragging 
-                  ? 'border-primary border-2 bg-primary/5' 
+                isDragging
+                  ? 'border-primary border-2 bg-primary/5'
                   : 'border-border/50'
               }`}
               data-drag-container="prompt"
@@ -563,7 +592,9 @@ export default function PromptComponent({
                 <div className="absolute inset-0 bg-primary/5 z-10 flex items-center justify-center rounded-2xl">
                   <div className="flex items-center gap-2 bg-primary/10 backdrop-blur-sm px-3 py-2 rounded-lg border border-primary/20">
                     <PaperclipIcon className="w-4 h-4 text-primary" />
-                    <span className="text-primary font-medium text-sm">Drop files</span>
+                    <span className="text-primary font-medium text-sm">
+                      Drop files
+                    </span>
                   </div>
                 </div>
               )}

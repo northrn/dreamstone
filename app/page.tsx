@@ -137,7 +137,7 @@ export default function HomePage() {
     prompt: string,
     settings: { modelId: string; imageGenerations: boolean; thinking: boolean },
     attachments?: { url: string; name?: string; type?: string }[],
-  ) => {
+  ): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
 
@@ -162,22 +162,25 @@ export default function HomePage() {
         // Check for API key error
         if (response.status === 401 && errorData.error === 'API_KEY_MISSING') {
           // API key error is now handled by useApiValidation hook
-          return
+          return false
         }
 
         // Check for rate limit error
-        if (response.status === 429 && errorData.error === 'RATE_LIMIT_EXCEEDED') {
+        if (
+          response.status === 429 &&
+          errorData.error === 'RATE_LIMIT_EXCEEDED'
+        ) {
           setRateLimitInfo({
             resetTime: errorData.resetTime,
-            remaining: errorData.remaining
+            remaining: errorData.remaining,
           })
           setShowRateLimitDialog(true)
-          return
+          return false
         }
 
         setErrorMessage(errorData.error || 'Failed to generate app')
         setShowErrorDialog(true)
-        return
+        return false
       }
 
       const data = await response.json()
@@ -185,10 +188,17 @@ export default function HomePage() {
       // Redirect to the new chat
       if (data.id || data.chatId) {
         const newChatId = data.id || data.chatId
-        const projectId = data.projectId || 'default' // Fallback project
-        router.push(`/projects/${projectId}/chats/${newChatId}`)
-        return
+        if (!data.projectId) {
+          setErrorMessage('Generated chat is missing a project ID')
+          setShowErrorDialog(true)
+          return false
+        }
+
+        router.push(`/projects/${data.projectId}/chats/${newChatId}`)
+        return true
       }
+
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -196,6 +206,7 @@ export default function HomePage() {
           : 'Failed to generate app. Please try again.',
       )
       setShowErrorDialog(true)
+      return false
     } finally {
       setIsLoading(false)
     }

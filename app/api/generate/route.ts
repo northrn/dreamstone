@@ -1,6 +1,14 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { checkRateLimit, getUserIdentifier } from '@/lib/rate-limiter'
+import {
+  addOwnedProjectsToResponse,
+  associateProjectWithRequest,
+  forbiddenResponse,
+  ownsProject,
+  projectIdForChat,
+  projectIdFromResource,
+} from '@/lib/project-ownership'
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,33 +31,48 @@ export async function POST(request: NextRequest) {
 
     // Check rate limit for ALL generations (both new and existing chats)
     const userIdentifier = getUserIdentifier(request)
-    const userIP = getUserIP(request)
     const rateLimitResult = await checkRateLimit(userIdentifier)
-    
+
     if (!rateLimitResult.success) {
       const resetTime = rateLimitResult.resetTime.toLocaleString()
       return NextResponse.json(
-        { 
+        {
           error: 'RATE_LIMIT_EXCEEDED',
           message: `You've reached the limit of 3 generations per 12 hours. Please try again after ${resetTime}.`,
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
-          resetTime: rateLimitResult.resetTime.toISOString()
+          resetTime: rateLimitResult.resetTime.toISOString(),
         },
-        { 
+        {
           status: 429,
           headers: {
             'X-RateLimit-Limit': rateLimitResult.limit.toString(),
             'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
             'X-RateLimit-Reset': rateLimitResult.reset.toString(),
-          }
-        }
+          },
+        },
       )
     }
 
     let response
+    let responseProjectId: string | undefined
 
     if (chatId) {
+      const chat = await v0.chats.getById({ chatId })
+      const chatProjectId = await projectIdForChat(v0, chatId, chat)
+
+      if (!chatProjectId || !(await ownsProject(request, chatProjectId))) {
+        return forbiddenResponse()
+      }
+
+      if (projectId && projectId !== chatProjectId) {
+        return NextResponse.json(
+          { error: 'Chat does not belong to the requested project' },
+          { status: 400 },
+        )
+      }
+      responseProjectId = chatProjectId
+
       // Continue existing chat using sendMessage
       response = await v0.chats.sendMessage({
         chatId: chatId,
@@ -62,9 +85,15 @@ export async function POST(request: NextRequest) {
         ...(attachments.length > 0 && { attachments }),
       })
     } else {
+      if (projectId && !(await ownsProject(request, projectId))) {
+        return forbiddenResponse()
+      }
+      responseProjectId = projectId
+
       // Create new chat
       response = await v0.chats.create({
-        system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
+        system:
+          'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
         message: message.trim(),
         modelConfiguration: {
           modelId: modelId,
@@ -76,10 +105,30 @@ export async function POST(request: NextRequest) {
       })
 
       // If a project was created/returned, associate it with the user's IP
-      if (response.projectId) {
-        await associateProjectWithIP(response.projectId, userIP)
+      const createdProjectId = projectIdFromResource(response)
+
+      if (createdProjectId) {
+        response = { ...response, projectId: createdProjectId }
+        const jsonResponse = NextResponse.json(response)
+        await associateProjectWithRequest(
+          request,
+          jsonResponse,
+          createdProjectId,
+        )
+
+        // Rename the new chat to "Main" for new projects
+        try {
+          await v0.chats.update({
+            chatId: response.id,
+            name: 'Main',
+          })
+        } catch (updateError) {
+          // Don't fail the entire request if renaming fails
+        }
+
+        return jsonResponse
       }
-      
+
       // Rename the new chat to "Main" for new projects
       try {
         await v0.chats.update({
@@ -91,7 +140,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(response)
+    const jsonResponse = NextResponse.json(response)
+    if (responseProjectId) {
+      addOwnedProjectsToResponse(request, jsonResponse, [responseProjectId])
+    }
+
+    return jsonResponse
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {
