@@ -40,6 +40,11 @@ export default function ChatPage() {
     chatId === 'new-chat' ? 'new' : chatId,
   )
 
+  useEffect(() => {
+    setSelectedProjectId(projectId)
+    setSelectedChatId(chatId === 'new-chat' ? 'new' : chatId)
+  }, [projectId, chatId])
+
   // Load existing chat data when component mounts (only if API is valid)
   useEffect(() => {
     if (!isValidating && !showApiKeyError) {
@@ -283,7 +288,7 @@ export default function ChatPage() {
     prompt: string,
     settings: { modelId: string; imageGenerations: boolean; thinking: boolean },
     attachments?: { url: string; name?: string; type?: string }[],
-  ) => {
+  ): Promise<boolean> => {
     setIsLoading(true)
     setError(null)
 
@@ -310,22 +315,25 @@ export default function ChatPage() {
         // Check for API key error
         if (response.status === 401 && errorData.error === 'API_KEY_MISSING') {
           // API key error is now handled by useApiValidation hook
-          return
+          return false
         }
 
         // Check for rate limit error
-        if (response.status === 429 && errorData.error === 'RATE_LIMIT_EXCEEDED') {
+        if (
+          response.status === 429 &&
+          errorData.error === 'RATE_LIMIT_EXCEEDED'
+        ) {
           setRateLimitInfo({
             resetTime: errorData.resetTime,
-            remaining: errorData.remaining
+            remaining: errorData.remaining,
           })
           setShowRateLimitDialog(true)
-          return
+          return false
         }
 
         setErrorMessage(errorData.error || 'Failed to generate app')
         setShowErrorDialog(true)
-        return
+        return false
       }
 
       const data = await response.json()
@@ -339,7 +347,7 @@ export default function ChatPage() {
         const newChatId = data.id || data.chatId
         const newProjectId = data.projectId || selectedProjectId
         router.replace(`/projects/${newProjectId}/chats/${newChatId}`)
-        return
+        return true
       }
 
       // Create iframe preview using v0's demo URL or main URL
@@ -375,6 +383,8 @@ export default function ChatPage() {
         `
         setGeneratedApp(fallbackPreview)
       }
+
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -382,6 +392,7 @@ export default function ChatPage() {
           : 'Failed to generate app. Please try again.',
       )
       setShowErrorDialog(true)
+      return false
     } finally {
       setIsLoading(false)
     }

@@ -5,16 +5,11 @@ export async function GET() {
   try {
     // Use v0.user.get() to verify they are authenticated correctly
     // This is more accurate than projects.find() for authentication verification
-    const user = await v0.user.get()
+    await v0.user.get()
 
     return NextResponse.json({
       valid: true,
       message: 'API key is configured correctly',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
     })
   } catch (error) {
     if (error instanceof Error) {

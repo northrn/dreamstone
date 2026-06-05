@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  addOwnedProjectsToResponse,
+  forbiddenResponse,
+  ownsProject,
+} from '@/lib/project-ownership'
 
 export async function GET(
   request: NextRequest,
@@ -15,10 +20,17 @@ export async function GET(
       )
     }
 
+    if (!(await ownsProject(request, projectId))) {
+      return forbiddenResponse()
+    }
+
     // Get project details by ID
     const response = await v0.projects.getById({ projectId })
 
-    return NextResponse.json(response)
+    const jsonResponse = NextResponse.json(response)
+    addOwnedProjectsToResponse(request, jsonResponse, [projectId])
+
+    return jsonResponse
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {
@@ -40,6 +52,9 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ error: 'Failed to get project' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Failed to get project' },
+      { status: 500 },
+    )
   }
 }

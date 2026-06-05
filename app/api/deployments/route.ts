@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import {
+  addOwnedProjectsToResponse,
+  forbiddenResponse,
+  ownsProject,
+  projectIdFromResource,
+} from '@/lib/project-ownership'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +25,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!(await ownsProject(request, projectId))) {
+      return forbiddenResponse()
+    }
+
+    const chat = await v0.chats.getById({ chatId })
+    const chatProjectId = projectIdFromResource(chat)
+
+    if (chatProjectId !== projectId) {
+      return forbiddenResponse()
+    }
+
     // Create deployment using v0 SDK
     try {
       const result = await v0.deployments.create({
@@ -27,7 +44,10 @@ export async function POST(request: NextRequest) {
         versionId,
       })
 
-      return NextResponse.json(result)
+      const jsonResponse = NextResponse.json(result)
+      addOwnedProjectsToResponse(request, jsonResponse, [projectId])
+
+      return jsonResponse
     } catch (deployError) {
       // Check if the error is about missing Vercel project ID
       if (
@@ -52,7 +72,10 @@ export async function POST(request: NextRequest) {
             versionId,
           })
 
-          return NextResponse.json(result)
+          const jsonResponse = NextResponse.json(result)
+          addOwnedProjectsToResponse(request, jsonResponse, [projectId])
+
+          return jsonResponse
         } catch (vercelError) {
           // If Vercel project creation fails, return that error
           throw new Error(
