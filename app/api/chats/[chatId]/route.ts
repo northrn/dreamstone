@@ -4,7 +4,7 @@ import {
   addOwnedProjectsToResponse,
   forbiddenResponse,
   ownsProject,
-  projectIdFromResource,
+  projectIdForChat,
 } from '@/lib/project-ownership'
 
 export async function GET(
@@ -27,7 +27,7 @@ export async function GET(
 
     // Get chat details by ID
     const response = await v0.chats.getById({ chatId: chatId })
-    const projectId = projectIdFromResource(response)
+    const projectId = await projectIdForChat(v0, chatId, response)
 
     if (!projectId || !(await ownsProject(request, projectId))) {
       return forbiddenResponse()
@@ -80,7 +80,7 @@ export async function DELETE(
     })
 
     const chat = await v0.chats.getById({ chatId })
-    const projectId = projectIdFromResource(chat)
+    const projectId = await projectIdForChat(v0, chatId, chat)
 
     if (!projectId || !(await ownsProject(request, projectId))) {
       return forbiddenResponse()
@@ -143,7 +143,7 @@ export async function PATCH(
     })
 
     const chat = await v0.chats.getById({ chatId })
-    const projectId = projectIdFromResource(chat)
+    const projectId = await projectIdForChat(v0, chatId, chat)
 
     if (!projectId || !(await ownsProject(request, projectId))) {
       return forbiddenResponse()

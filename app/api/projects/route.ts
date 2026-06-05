@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
 
-    // Get user's project IDs from the signed cookie and legacy Redis/IP mapping
+    // Get user's project IDs from the server-signed ownership cookie.
     const userProjectIds = await getOwnedProjectIds(request)
 
     // Filter projects to only include those owned by this user

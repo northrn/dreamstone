@@ -4,7 +4,7 @@ import {
   addOwnedProjectsToResponse,
   forbiddenResponse,
   ownsProject,
-  projectIdFromResource,
+  projectIdForChat,
 } from '@/lib/project-ownership'
 
 export async function POST(request: NextRequest) {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const chat = await v0.chats.getById({ chatId })
-    const chatProjectId = projectIdFromResource(chat)
+    const chatProjectId = await projectIdForChat(v0, chatId, chat)
 
     if (chatProjectId !== projectId) {
       return forbiddenResponse()

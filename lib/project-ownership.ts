@@ -1,10 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import {
-  associateProjectWithIP,
-  getUserIP,
-  getUserProjects,
-} from './rate-limiter'
+import { associateProjectWithIP, getUserIP } from './rate-limiter'
 
 const PROJECT_OWNERSHIP_COOKIE = 'v0-owned-projects'
 const MAX_COOKIE_PROJECTS = 75
@@ -52,6 +48,32 @@ export function projectIdFromResource(resource: unknown): string | undefined {
   }
 
   return undefined
+}
+
+export function projectIdFromProject(project: unknown): string | undefined {
+  const nestedProjectId = projectIdFromResource(project)
+  if (nestedProjectId) return nestedProjectId
+
+  if (!project || typeof project !== 'object') return undefined
+
+  const record = project as Record<string, unknown>
+  return typeof record.id === 'string' ? record.id : undefined
+}
+
+export async function projectIdForChat(
+  v0Client: {
+    projects: {
+      getByChatId(params: { chatId: string }): Promise<unknown>
+    }
+  },
+  chatId: string,
+  chat: unknown,
+) {
+  const chatProjectId = projectIdFromResource(chat)
+  if (chatProjectId) return chatProjectId
+
+  const project = await v0Client.projects.getByChatId({ chatId })
+  return projectIdFromProject(project)
 }
 
 export function getCookieProjectIds(request: NextRequest) {
@@ -114,10 +136,7 @@ export async function associateProjectWithRequest(
 }
 
 export async function getOwnedProjectIds(request: NextRequest) {
-  const cookieProjectIds = getCookieProjectIds(request)
-  const ipProjectIds = await getUserProjects(getUserIP(request))
-
-  return uniqueProjectIds([...cookieProjectIds, ...ipProjectIds])
+  return getCookieProjectIds(request)
 }
 
 export async function ownsProject(request: NextRequest, projectId: string) {

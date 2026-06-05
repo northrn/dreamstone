@@ -6,6 +6,7 @@ import {
   associateProjectWithRequest,
   forbiddenResponse,
   ownsProject,
+  projectIdForChat,
   projectIdFromResource,
 } from '@/lib/project-ownership'
 
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     if (chatId) {
       const chat = await v0.chats.getById({ chatId })
-      const chatProjectId = projectIdFromResource(chat)
+      const chatProjectId = await projectIdForChat(v0, chatId, chat)
 
       if (!chatProjectId || !(await ownsProject(request, chatProjectId))) {
         return forbiddenResponse()
@@ -104,12 +105,15 @@ export async function POST(request: NextRequest) {
       })
 
       // If a project was created/returned, associate it with the user's IP
-      if (response.projectId) {
+      const createdProjectId = projectIdFromResource(response)
+
+      if (createdProjectId) {
+        response = { ...response, projectId: createdProjectId }
         const jsonResponse = NextResponse.json(response)
         await associateProjectWithRequest(
           request,
           jsonResponse,
-          response.projectId,
+          createdProjectId,
         )
 
         // Rename the new chat to "Main" for new projects
