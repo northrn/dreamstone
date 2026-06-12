@@ -16,13 +16,16 @@ A Next.js application showcasing the v0 Platform API. Build AI-powered apps with
    ```env
    V0_API_KEY=your_api_key_here
    
-   # Optional: For rate limiting (if not provided, rate limiting is disabled)
+   # Required for production project ownership tracking and rate limiting
    KV_REST_API_URL=your_kv_rest_api_url
    KV_REST_API_TOKEN=your_kv_rest_api_token
+
+   # Optional: dedicated secret for signing project owner cookies
+   PROJECT_ACCESS_SECRET=your_random_secret_here
    ```
    
    - Get your v0 API key from [v0.dev/settings](https://v0.dev/settings)
-   - Optionally get your Upstash Redis credentials from [upstash.com](https://upstash.com) for rate limiting
+   - Get Upstash Redis credentials from [upstash.com](https://upstash.com) for production project access tracking and rate limiting
 
 3. **Run development server:**
    ```bash
@@ -109,8 +112,9 @@ When the rate limit is exceeded, users receive a 429 status code with informatio
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `V0_API_KEY` | Yes | Your v0 Platform API key from [v0.dev/settings](https://v0.dev/settings) |
-| `KV_REST_API_URL` | No | Upstash Redis REST URL for rate limiting (if not provided, rate limiting is disabled) |
-| `KV_REST_API_TOKEN` | No | Upstash Redis REST token for rate limiting (if not provided, rate limiting is disabled) |
+| `KV_REST_API_URL` | Production | Upstash Redis REST URL for project ownership tracking and rate limiting |
+| `KV_REST_API_TOKEN` | Production | Upstash Redis REST token for project ownership tracking and rate limiting |
+| `PROJECT_ACCESS_SECRET` | No | Optional dedicated secret for signing project owner cookies. Falls back to `V0_API_KEY` when unset |
 
 ## Development Commands
 
