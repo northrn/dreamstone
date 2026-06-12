@@ -1,6 +1,10 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  authorizeChatAccess,
+  authorizeProjectAccess,
+} from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,6 +49,23 @@ export async function POST(request: NextRequest) {
           }
         }
       )
+    }
+
+    if (chatId) {
+      const chatAccess = await authorizeChatAccess(
+        request,
+        v0,
+        chatId,
+        projectId,
+      )
+      if (!chatAccess.authorized) {
+        return chatAccess.response
+      }
+    } else if (projectId) {
+      const projectAccess = await authorizeProjectAccess(request, projectId)
+      if (!projectAccess.authorized) {
+        return projectAccess.response
+      }
     }
 
     let response

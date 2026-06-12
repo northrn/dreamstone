@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { authorizeProjectAccess } from '@/lib/access-control'
 
 export async function GET(
   request: NextRequest,
@@ -13,6 +14,11 @@ export async function GET(
         { error: 'Project ID is required' },
         { status: 400 },
       )
+    }
+
+    const projectAccess = await authorizeProjectAccess(request, projectId)
+    if (!projectAccess.authorized) {
+      return projectAccess.response
     }
 
     // Get project details by ID

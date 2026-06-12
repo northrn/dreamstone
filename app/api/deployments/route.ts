@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
+import { authorizeChatAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,16 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+
+    const chatAccess = await authorizeChatAccess(
+      request,
+      v0,
+      chatId,
+      projectId,
+    )
+    if (!chatAccess.authorized) {
+      return chatAccess.response
     }
 
     // Create deployment using v0 SDK

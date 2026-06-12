@@ -25,6 +25,10 @@ if (isRateLimitingEnabled) {
   })
 }
 
+export function isProjectTrackingEnabled(): boolean {
+  return redis !== null
+}
+
 // Function to get user identifier from request
 export function getUserIdentifier(request: Request): string {
   // Try to get IP address from various headers

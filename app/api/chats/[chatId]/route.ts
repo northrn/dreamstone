@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import { authorizeChatAccess } from '@/lib/access-control'
 
 export async function GET(
   request: NextRequest,
@@ -19,10 +20,12 @@ export async function GET(
       apiKey: process.env.V0_API_KEY,
     })
 
-    // Get chat details by ID
-    const response = await v0.chats.getById({ chatId: chatId })
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
-    return NextResponse.json(response)
+    return NextResponse.json(chatAccess.chat)
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -64,6 +67,11 @@ export async function DELETE(
     const v0 = createClient({
       apiKey: process.env.V0_API_KEY,
     })
+
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
     // Delete chat using v0 SDK
     await v0.chats.delete({ chatId })
@@ -117,6 +125,11 @@ export async function PATCH(
     const v0 = createClient({
       apiKey: process.env.V0_API_KEY,
     })
+
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
     // Update chat name using v0 SDK
     const response = await v0.chats.update({

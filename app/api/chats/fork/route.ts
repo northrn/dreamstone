@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import { authorizeChatAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,16 @@ export async function POST(request: NextRequest) {
 
     // Get user's IP
     const userIP = getUserIP(request)
+
+    const chatAccess = await authorizeChatAccess(
+      request,
+      v0,
+      chatId,
+      projectId,
+    )
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
