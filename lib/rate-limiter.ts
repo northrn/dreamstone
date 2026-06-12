@@ -42,6 +42,10 @@ export function isProjectTrackingEnabled(): boolean {
   return redis !== null
 }
 
+export function canCreateProjectOwnershipRecords(): boolean {
+  return isProjectTrackingEnabled() || process.env.NODE_ENV !== 'production'
+}
+
 export function getProjectOwner(request: Request): ProjectOwner {
   const cookie = getCookie(request, projectOwnerCookieName)
   const existingOwnerId = cookie ? verifyOwnerCookie(cookie) : null
@@ -97,13 +101,22 @@ export async function associateProjectWithOwner(
   projectId: string,
   ownerKey: string,
 ): Promise<void> {
-  if (!redis) return // Skip if Redis is not available
+  if (!redis) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Project access tracking is not configured')
+    }
+
+    return
+  }
 
   try {
     // Store only user_projects mapping
     await redis.sadd(`user_projects:${ownerKey}`, projectId)
   } catch (error) {
     console.warn('Failed to associate project with owner:', error)
+    if (process.env.NODE_ENV === 'production') {
+      throw error
+    }
   }
 }
 

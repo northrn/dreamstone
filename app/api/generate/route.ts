@@ -2,6 +2,7 @@ import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   applyProjectOwnerCookie,
+  canCreateProjectOwnershipRecords,
   checkRateLimit,
   getProjectOwner,
   getUserIdentifier,
@@ -74,6 +75,11 @@ export async function POST(request: NextRequest) {
         return projectAccess.response
       }
       owner = projectAccess.owner
+    } else if (!canCreateProjectOwnershipRecords()) {
+      return NextResponse.json(
+        { error: 'Project access tracking is not configured' },
+        { status: 503 },
+      )
     }
 
     let response

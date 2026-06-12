@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import {
   applyProjectOwnerCookie,
+  canCreateProjectOwnershipRecords,
   getProjectOwner,
   getUserProjects,
   associateProjectWithOwner,
@@ -65,6 +66,13 @@ export async function POST(request: NextRequest) {
     const owner = getProjectOwner(request)
 
     // Create project using v0 SDK
+    if (!canCreateProjectOwnershipRecords()) {
+      return NextResponse.json(
+        { error: 'Project access tracking is not configured' },
+        { status: 503 },
+      )
+    }
+
     const project = await v0.projects.create({
       name: name.trim(),
     })
