@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from 'v0-sdk'
+import { authorizeChatAccess } from '@/lib/access-control'
+import { applyProjectOwnerCookie } from '@/lib/rate-limiter'
 
 export async function GET(
   request: NextRequest,
@@ -19,10 +21,15 @@ export async function GET(
       apiKey: process.env.V0_API_KEY,
     })
 
-    // Get chat details by ID
-    const response = await v0.chats.getById({ chatId: chatId })
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
-    return NextResponse.json(response)
+    return applyProjectOwnerCookie(
+      NextResponse.json(chatAccess.chat),
+      chatAccess.owner,
+    )
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
@@ -65,10 +72,18 @@ export async function DELETE(
       apiKey: process.env.V0_API_KEY,
     })
 
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
+
     // Delete chat using v0 SDK
     await v0.chats.delete({ chatId })
 
-    return NextResponse.json({ success: true })
+    return applyProjectOwnerCookie(
+      NextResponse.json({ success: true }),
+      chatAccess.owner,
+    )
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {
@@ -118,13 +133,21 @@ export async function PATCH(
       apiKey: process.env.V0_API_KEY,
     })
 
+    const chatAccess = await authorizeChatAccess(request, v0, chatId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
+
     // Update chat name using v0 SDK
     const response = await v0.chats.update({
       chatId: chatId,
       name: name.trim(),
     })
 
-    return NextResponse.json(response)
+    return applyProjectOwnerCookie(
+      NextResponse.json(response),
+      chatAccess.owner,
+    )
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()

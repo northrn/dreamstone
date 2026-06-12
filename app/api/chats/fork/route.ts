@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  applyProjectOwnerCookie,
+  associateProjectWithOwner,
+} from '@/lib/rate-limiter'
+import { authorizeChatAccess } from '@/lib/access-control'
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,8 +17,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
+    const chatAccess = await authorizeChatAccess(request, v0, chatId, projectId)
+    if (!chatAccess.authorized) {
+      return chatAccess.response
+    }
 
     // Fork the chat using v0 SDK
     const forkedChat = await v0.chats.fork({
@@ -22,12 +28,18 @@ export async function POST(request: NextRequest) {
       ...(projectId && { projectId }), // Include projectId if provided
     })
 
-    // If a project was created/returned, associate it with the user's IP
+    // If a project was created/returned, associate it with the signed browser owner.
     if (forkedChat.projectId) {
-      await associateProjectWithIP(forkedChat.projectId, userIP)
+      await associateProjectWithOwner(
+        forkedChat.projectId,
+        chatAccess.owner.key,
+      )
     }
 
-    return NextResponse.json(forkedChat)
+    return applyProjectOwnerCookie(
+      NextResponse.json(forkedChat),
+      chatAccess.owner,
+    )
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase()
