@@ -9,6 +9,9 @@ type ChatReader = {
   chats: {
     getById: (args: { chatId: string }) => Promise<unknown>
   }
+  projects?: {
+    getByChatId: (args: { chatId: string }) => Promise<unknown>
+  }
 }
 
 type AuthorizedProject = {
@@ -32,9 +35,18 @@ export async function authorizeProjectAccess(
 ): Promise<AuthorizedProject | Unauthorized> {
   const userIP = getUserIP(request)
 
-  // Without a project tracking store, the app runs in single-user demo mode.
   if (!isProjectTrackingEnabled()) {
-    return { authorized: true, userIP }
+    if (process.env.NODE_ENV !== 'production') {
+      return { authorized: true, userIP }
+    }
+
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Project access tracking is not configured' },
+        { status: 503 },
+      ),
+    }
   }
 
   const userProjectIds = await getUserProjects(userIP)
@@ -58,7 +70,7 @@ export async function authorizeChatAccess(
   expectedProjectId?: string,
 ): Promise<AuthorizedChat | Unauthorized> {
   const chat = await client.chats.getById({ chatId })
-  const projectId = getChatProjectId(chat)
+  const projectId = await resolveChatProjectId(client, chatId, chat)
 
   if (!projectId || (expectedProjectId && projectId !== expectedProjectId)) {
     return {
@@ -98,6 +110,32 @@ export function getChatProjectId(chat: unknown): string | null {
   }
 
   return null
+}
+
+async function resolveChatProjectId(
+  client: ChatReader,
+  chatId: string,
+  chat: unknown,
+): Promise<string | null> {
+  const chatProjectId = getChatProjectId(chat)
+  if (chatProjectId) {
+    return chatProjectId
+  }
+
+  if (!client.projects?.getByChatId) {
+    return null
+  }
+
+  const project = await client.projects.getByChatId({ chatId })
+  return getProjectId(project)
+}
+
+function getProjectId(project: unknown): string | null {
+  const projectRecord = asRecord(project)
+  if (!projectRecord) return null
+
+  const id = projectRecord.id
+  return typeof id === 'string' && id.length > 0 ? id : null
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

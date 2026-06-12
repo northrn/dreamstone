@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getUserIP: vi.fn(),
@@ -60,7 +60,12 @@ describe('authorizeProjectAccess', () => {
     }
   })
 
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it('keeps local single-user demo mode working without project tracking', async () => {
+    vi.stubEnv('NODE_ENV', 'development')
     mocks.isProjectTrackingEnabled.mockReturnValue(false)
 
     await expect(
@@ -69,6 +74,21 @@ describe('authorizeProjectAccess', () => {
       authorized: true,
       userIP: '203.0.113.10',
     })
+  })
+
+  it('fails closed in production without project tracking', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    mocks.isProjectTrackingEnabled.mockReturnValue(false)
+
+    const result = await authorizeProjectAccess(
+      new Request('https://example.com'),
+      'prj_any',
+    )
+
+    expect(result.authorized).toBe(false)
+    if (!result.authorized) {
+      expect(result.response.status).toBe(503)
+    }
   })
 })
 
@@ -87,6 +107,9 @@ describe('authorizeChatAccess', () => {
           projectId: 'prj_allowed',
         }),
       },
+      projects: {
+        getByChatId: vi.fn(),
+      },
     }
 
     const result = await authorizeChatAccess(
@@ -102,6 +125,36 @@ describe('authorizeChatAccess', () => {
     })
   })
 
+  it('falls back to the project lookup when a chat omits projectId', async () => {
+    const client = {
+      chats: {
+        getById: vi.fn().mockResolvedValue({
+          id: 'chat_1',
+        }),
+      },
+      projects: {
+        getByChatId: vi.fn().mockResolvedValue({
+          id: 'prj_allowed',
+        }),
+      },
+    }
+
+    const result = await authorizeChatAccess(
+      new Request('https://example.com'),
+      client,
+      'chat_1',
+      'prj_allowed',
+    )
+
+    expect(client.projects.getByChatId).toHaveBeenCalledWith({
+      chatId: 'chat_1',
+    })
+    expect(result).toMatchObject({
+      authorized: true,
+      projectId: 'prj_allowed',
+    })
+  })
+
   it('denies chats whose project does not match the expected project', async () => {
     const client = {
       chats: {
@@ -109,6 +162,9 @@ describe('authorizeChatAccess', () => {
           id: 'chat_1',
           projectId: 'prj_other',
         }),
+      },
+      projects: {
+        getByChatId: vi.fn(),
       },
     }
 
@@ -129,6 +185,9 @@ describe('authorizeChatAccess', () => {
     const client = {
       chats: {
         getById: vi.fn().mockResolvedValue({ id: 'chat_1' }),
+      },
+      projects: {
+        getByChatId: vi.fn().mockResolvedValue({}),
       },
     }
 
