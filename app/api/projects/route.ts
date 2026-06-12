@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
-import { getUserIP, getUserProjects, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  applyProjectOwnerCookie,
+  getProjectOwner,
+  getUserProjects,
+  associateProjectWithOwner,
+} from '@/lib/rate-limiter'
 
 export async function GET(request: NextRequest) {
   try {
-    // Get user's IP
-    const userIP = getUserIP(request)
-    
+    const owner = getProjectOwner(request)
+
     // Get all projects from v0
     const response = await v0.projects.find()
     const allProjects = response.data || response || []
-    
+
     // Get user's project IDs from Redis
-    const userProjectIds = await getUserProjects(userIP)
-    
+    const userProjectIds = await getUserProjects(owner.key)
+
     // Filter projects to only include those owned by this user
-    const userProjects = allProjects.filter((project: any) => 
-      userProjectIds.includes(project.id)
+    const userProjects = allProjects.filter((project: any) =>
+      userProjectIds.includes(project.id),
     )
-    
-    return NextResponse.json({ data: userProjects })
+
+    return applyProjectOwnerCookie(
+      NextResponse.json({ data: userProjects }),
+      owner,
+    )
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {
@@ -55,20 +62,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's IP
-    const userIP = getUserIP(request)
+    const owner = getProjectOwner(request)
 
     // Create project using v0 SDK
     const project = await v0.projects.create({
       name: name.trim(),
     })
 
-    // Associate the project with the user's IP
+    // Associate the project with the signed browser owner.
     if (project.id) {
-      await associateProjectWithIP(project.id, userIP)
+      await associateProjectWithOwner(project.id, owner.key)
     }
 
-    return NextResponse.json(project)
+    return applyProjectOwnerCookie(NextResponse.json(project), owner)
   } catch (error) {
     // Check if it's an API key error
     if (error instanceof Error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v0 } from 'v0-sdk'
 import { authorizeChatAccess } from '@/lib/access-control'
+import { applyProjectOwnerCookie } from '@/lib/rate-limiter'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +21,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const chatAccess = await authorizeChatAccess(
-      request,
-      v0,
-      chatId,
-      projectId,
-    )
+    const chatAccess = await authorizeChatAccess(request, v0, chatId, projectId)
     if (!chatAccess.authorized) {
       return chatAccess.response
     }
@@ -38,7 +34,10 @@ export async function POST(request: NextRequest) {
         versionId,
       })
 
-      return NextResponse.json(result)
+      return applyProjectOwnerCookie(
+        NextResponse.json(result),
+        chatAccess.owner,
+      )
     } catch (deployError) {
       // Check if the error is about missing Vercel project ID
       if (
@@ -63,7 +62,10 @@ export async function POST(request: NextRequest) {
             versionId,
           })
 
-          return NextResponse.json(result)
+          return applyProjectOwnerCookie(
+            NextResponse.json(result),
+            chatAccess.owner,
+          )
         } catch (vercelError) {
           // If Vercel project creation fails, return that error
           throw new Error(

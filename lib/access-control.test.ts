@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  getUserIP: vi.fn(),
+  getProjectOwner: vi.fn(),
   getUserProjects: vi.fn(),
   isProjectTrackingEnabled: vi.fn(),
 }))
@@ -16,9 +16,7 @@ import {
 
 describe('getChatProjectId', () => {
   it('reads the direct projectId from a chat response', () => {
-    expect(getChatProjectId({ id: 'chat_1', projectId: 'prj_1' })).toBe(
-      'prj_1',
-    )
+    expect(getChatProjectId({ id: 'chat_1', projectId: 'prj_1' })).toBe('prj_1')
   })
 
   it('falls back to a nested project id', () => {
@@ -34,21 +32,22 @@ describe('getChatProjectId', () => {
 
 describe('authorizeProjectAccess', () => {
   beforeEach(() => {
-    mocks.getUserIP.mockReturnValue('203.0.113.10')
+    mocks.getProjectOwner.mockReturnValue({ key: 'owner:browser-1' })
     mocks.getUserProjects.mockResolvedValue(['prj_allowed'])
     mocks.isProjectTrackingEnabled.mockReturnValue(true)
   })
 
-  it('allows projects associated with the requester IP', async () => {
+  it('allows projects associated with the signed browser owner', async () => {
     await expect(
       authorizeProjectAccess(new Request('https://example.com'), 'prj_allowed'),
     ).resolves.toMatchObject({
       authorized: true,
-      userIP: '203.0.113.10',
+      owner: { key: 'owner:browser-1' },
     })
+    expect(mocks.getUserProjects).toHaveBeenCalledWith('owner:browser-1')
   })
 
-  it('denies projects that are not associated with the requester IP', async () => {
+  it('denies projects that are not associated with the signed browser owner', async () => {
     const result = await authorizeProjectAccess(
       new Request('https://example.com'),
       'prj_other',
@@ -72,7 +71,7 @@ describe('authorizeProjectAccess', () => {
       authorizeProjectAccess(new Request('https://example.com'), 'prj_any'),
     ).resolves.toMatchObject({
       authorized: true,
-      userIP: '203.0.113.10',
+      owner: { key: 'owner:browser-1' },
     })
   })
 
@@ -94,7 +93,7 @@ describe('authorizeProjectAccess', () => {
 
 describe('authorizeChatAccess', () => {
   beforeEach(() => {
-    mocks.getUserIP.mockReturnValue('203.0.113.10')
+    mocks.getProjectOwner.mockReturnValue({ key: 'owner:browser-1' })
     mocks.getUserProjects.mockResolvedValue(['prj_allowed'])
     mocks.isProjectTrackingEnabled.mockReturnValue(true)
   })

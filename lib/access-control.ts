@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import {
-  getUserIP,
+  getProjectOwner,
   getUserProjects,
   isProjectTrackingEnabled,
+  type ProjectOwner,
 } from '@/lib/rate-limiter'
 
 type ChatReader = {
@@ -16,7 +17,7 @@ type ChatReader = {
 
 type AuthorizedProject = {
   authorized: true
-  userIP: string
+  owner: ProjectOwner
 }
 
 type AuthorizedChat = AuthorizedProject & {
@@ -33,11 +34,11 @@ export async function authorizeProjectAccess(
   request: Request,
   projectId: string,
 ): Promise<AuthorizedProject | Unauthorized> {
-  const userIP = getUserIP(request)
+  const owner = getProjectOwner(request)
 
   if (!isProjectTrackingEnabled()) {
     if (process.env.NODE_ENV !== 'production') {
-      return { authorized: true, userIP }
+      return { authorized: true, owner }
     }
 
     return {
@@ -49,9 +50,9 @@ export async function authorizeProjectAccess(
     }
   }
 
-  const userProjectIds = await getUserProjects(userIP)
+  const userProjectIds = await getUserProjects(owner.key)
   if (userProjectIds.includes(projectId)) {
-    return { authorized: true, userIP }
+    return { authorized: true, owner }
   }
 
   return {
@@ -89,7 +90,7 @@ export async function authorizeChatAccess(
 
   return {
     authorized: true,
-    userIP: projectAccess.userIP,
+    owner: projectAccess.owner,
     chat,
     projectId,
   }
