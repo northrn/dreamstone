@@ -310,7 +310,7 @@ export default function ChatPage() {
         // Check for API key error
         if (response.status === 401 && errorData.error === 'API_KEY_MISSING') {
           // API key error is now handled by useApiValidation hook
-          return
+          return false
         }
 
         // Check for rate limit error
@@ -320,12 +320,12 @@ export default function ChatPage() {
             remaining: errorData.remaining
           })
           setShowRateLimitDialog(true)
-          return
+          return false
         }
 
         setErrorMessage(errorData.error || 'Failed to generate app')
         setShowErrorDialog(true)
-        return
+        return false
       }
 
       const data = await response.json()
@@ -339,7 +339,7 @@ export default function ChatPage() {
         const newChatId = data.id || data.chatId
         const newProjectId = data.projectId || selectedProjectId
         router.replace(`/projects/${newProjectId}/chats/${newChatId}`)
-        return
+        return true
       }
 
       // Create iframe preview using v0's demo URL or main URL
@@ -375,6 +375,7 @@ export default function ChatPage() {
         `
         setGeneratedApp(fallbackPreview)
       }
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -382,6 +383,7 @@ export default function ChatPage() {
           : 'Failed to generate app. Please try again.',
       )
       setShowErrorDialog(true)
+      return false
     } finally {
       setIsLoading(false)
     }

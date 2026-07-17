@@ -99,7 +99,7 @@ interface PromptComponentProps {
     prompt: string,
     settings: { modelId: string; imageGenerations: boolean; thinking: boolean },
     attachments?: Attachment[],
-  ) => Promise<void>
+  ) => Promise<boolean>
 
   // Loading state from parent
   isLoading: boolean
@@ -375,7 +375,7 @@ export default function PromptComponent({
     setShouldAnimate(false) // Reset animation state
 
     try {
-      await onSubmit(
+      const submitted = await onSubmit(
         prompt.trim(),
         {
           modelId: settings.model,
@@ -384,6 +384,8 @@ export default function PromptComponent({
         },
         attachments,
       )
+      if (!submitted) return
+
       // Clear the prompt and attachments after successful submission
       setPrompt('')
       setAttachments([])
