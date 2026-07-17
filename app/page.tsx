@@ -181,16 +181,22 @@ export default function HomePage() {
       }
 
       const data = await response.json()
+      const newChatId = data.id || data.chatId
 
-      // Redirect to the new chat
-      if (data.id || data.chatId) {
-        const newChatId = data.id || data.chatId
-        const projectId = data.projectId || 'default' // Fallback project
-        router.push(`/projects/${projectId}/chats/${newChatId}`)
-        return true
+      if (
+        typeof newChatId !== 'string' ||
+        newChatId.length === 0 ||
+        data.latestVersion?.status === 'failed'
+      ) {
+        setErrorMessage('Failed to generate app. Please try again.')
+        setShowErrorDialog(true)
+        return false
       }
 
-      return false
+      // Redirect to the new chat
+      const projectId = data.projectId || 'default' // Fallback project
+      router.push(`/projects/${projectId}/chats/${newChatId}`)
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error

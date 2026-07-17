@@ -329,16 +329,27 @@ export default function ChatPage() {
       }
 
       const data = await response.json()
+      const responseChatId = data.id || data.chatId
+
+      if (
+        typeof responseChatId !== 'string' ||
+        responseChatId.length === 0 ||
+        data.latestVersion?.status === 'failed'
+      ) {
+        setErrorMessage('Failed to generate app. Please try again.')
+        setShowErrorDialog(true)
+        return false
+      }
+
       setChatData(data)
 
       // If this was a new chat, redirect to the actual chat ID within the project
       if (
         (selectedChatId === 'new' || selectedProjectId === 'new') &&
-        (data.id || data.chatId)
+        responseChatId
       ) {
-        const newChatId = data.id || data.chatId
         const newProjectId = data.projectId || selectedProjectId
-        router.replace(`/projects/${newProjectId}/chats/${newChatId}`)
+        router.replace(`/projects/${newProjectId}/chats/${responseChatId}`)
         return true
       }
 
