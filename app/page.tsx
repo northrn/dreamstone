@@ -162,7 +162,7 @@ export default function HomePage() {
         // Check for API key error
         if (response.status === 401 && errorData.error === 'API_KEY_MISSING') {
           // API key error is now handled by useApiValidation hook
-          return
+          return false
         }
 
         // Check for rate limit error
@@ -172,23 +172,31 @@ export default function HomePage() {
             remaining: errorData.remaining
           })
           setShowRateLimitDialog(true)
-          return
+          return false
         }
 
         setErrorMessage(errorData.error || 'Failed to generate app')
         setShowErrorDialog(true)
-        return
+        return false
       }
 
       const data = await response.json()
+      const newChatId = data.id || data.chatId
+
+      if (
+        typeof newChatId !== 'string' ||
+        newChatId.length === 0 ||
+        data.latestVersion?.status === 'failed'
+      ) {
+        setErrorMessage('Failed to generate app. Please try again.')
+        setShowErrorDialog(true)
+        return false
+      }
 
       // Redirect to the new chat
-      if (data.id || data.chatId) {
-        const newChatId = data.id || data.chatId
-        const projectId = data.projectId || 'default' // Fallback project
-        router.push(`/projects/${projectId}/chats/${newChatId}`)
-        return
-      }
+      const projectId = data.projectId || 'default' // Fallback project
+      router.push(`/projects/${projectId}/chats/${newChatId}`)
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -196,6 +204,7 @@ export default function HomePage() {
           : 'Failed to generate app. Please try again.',
       )
       setShowErrorDialog(true)
+      return false
     } finally {
       setIsLoading(false)
     }

@@ -310,7 +310,7 @@ export default function ChatPage() {
         // Check for API key error
         if (response.status === 401 && errorData.error === 'API_KEY_MISSING') {
           // API key error is now handled by useApiValidation hook
-          return
+          return false
         }
 
         // Check for rate limit error
@@ -320,26 +320,37 @@ export default function ChatPage() {
             remaining: errorData.remaining
           })
           setShowRateLimitDialog(true)
-          return
+          return false
         }
 
         setErrorMessage(errorData.error || 'Failed to generate app')
         setShowErrorDialog(true)
-        return
+        return false
       }
 
       const data = await response.json()
+      const responseChatId = data.id || data.chatId
+
+      if (
+        typeof responseChatId !== 'string' ||
+        responseChatId.length === 0 ||
+        data.latestVersion?.status === 'failed'
+      ) {
+        setErrorMessage('Failed to generate app. Please try again.')
+        setShowErrorDialog(true)
+        return false
+      }
+
       setChatData(data)
 
       // If this was a new chat, redirect to the actual chat ID within the project
       if (
         (selectedChatId === 'new' || selectedProjectId === 'new') &&
-        (data.id || data.chatId)
+        responseChatId
       ) {
-        const newChatId = data.id || data.chatId
         const newProjectId = data.projectId || selectedProjectId
-        router.replace(`/projects/${newProjectId}/chats/${newChatId}`)
-        return
+        router.replace(`/projects/${newProjectId}/chats/${responseChatId}`)
+        return true
       }
 
       // Create iframe preview using v0's demo URL or main URL
@@ -375,6 +386,7 @@ export default function ChatPage() {
         `
         setGeneratedApp(fallbackPreview)
       }
+      return true
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -382,6 +394,7 @@ export default function ChatPage() {
           : 'Failed to generate app. Please try again.',
       )
       setShowErrorDialog(true)
+      return false
     } finally {
       setIsLoading(false)
     }
