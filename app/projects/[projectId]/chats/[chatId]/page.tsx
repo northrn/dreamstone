@@ -8,6 +8,7 @@ import ApiKeyError from '../../../../components/api-key-error'
 import RateLimitDialog from '../../../../components/rate-limit-dialog'
 import ErrorDialog from '../../../../components/error-dialog'
 import { useApiValidation } from '../../../../../lib/hooks/useApiValidation'
+import { getChatPreviewUrl } from '../../../../../lib/chat-preview'
 
 export default function ChatPage() {
   const params = useParams()
@@ -267,11 +268,10 @@ export default function ChatPage() {
         const data = await response.json()
         setChatData(data)
 
-        // Load the latest app if available
-        if (data.demo) {
-          setGeneratedApp(data.demo)
-        } else if (data.url) {
-          setGeneratedApp(data.url)
+        // Load the latest app preview (demo is deprecated; prefer demoUrl)
+        const previewUrl = getChatPreviewUrl(data)
+        if (previewUrl) {
+          setGeneratedApp(previewUrl)
         }
       }
     } catch (err) {
@@ -342,13 +342,14 @@ export default function ChatPage() {
         return
       }
 
-      // Create iframe preview using v0's demo URL or main URL
-      if (data.demo) {
-        setGeneratedApp(data.demo)
-      } else if (data.url) {
-        setGeneratedApp(data.url)
+      // Create iframe preview using v0's demo / latestVersion.demoUrl.
+      // Do not fall back to data.url — that is the v0 chat page, not the app demo.
+      const previewUrl = getChatPreviewUrl(data)
+      if (previewUrl) {
+        setGeneratedApp(previewUrl)
       } else {
-        // Fallback: show a message with link
+        // Fallback: show a message with link to the chat on v0
+        const chatPageUrl = data.url || data.webUrl
         const fallbackPreview = `
           <!DOCTYPE html>
           <html>
@@ -361,9 +362,9 @@ export default function ChatPage() {
               <h1 class="text-xl font-semibold mb-4">App Generated Successfully!</h1>
               <p class="text-gray-600 mb-4">${data.text || 'Your app has been created.'}</p>
               ${
-                data.url
+                chatPageUrl
                   ? `
-                <a href="${data.url}" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors">
+                <a href="${chatPageUrl}" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors">
                   View on v0.dev
                 </a>
               `
