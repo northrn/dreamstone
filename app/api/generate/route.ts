@@ -1,6 +1,11 @@
 import { v0 } from 'v0-sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, getUserIdentifier, getUserIP, associateProjectWithIP } from '@/lib/rate-limiter'
+import {
+  DEFAULT_V0_MODEL_ID,
+  normalizeAttachments,
+  normalizeModelId,
+} from '@/lib/v0-request'
 
 export async function POST(request: NextRequest) {
   try {
@@ -8,7 +13,7 @@ export async function POST(request: NextRequest) {
       message,
       chatId,
       projectId,
-      modelId = 'v0-1.5-md',
+      modelId = DEFAULT_V0_MODEL_ID,
       imageGenerations = false,
       thinking = false,
       attachments = [],
@@ -47,6 +52,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Platform API rejects legacy model IDs and attachment extra fields.
+    const resolvedModelId = normalizeModelId(modelId)
+    const resolvedAttachments = normalizeAttachments(attachments)
+
     let response
 
     if (chatId) {
@@ -55,11 +64,14 @@ export async function POST(request: NextRequest) {
         chatId: chatId,
         message: message.trim(),
         modelConfiguration: {
-          modelId: modelId,
+          // SDK 0.5.1 types still list legacy IDs; runtime uses current API IDs.
+          modelId: resolvedModelId as never,
           imageGenerations: imageGenerations,
           thinking: thinking,
         },
-        ...(attachments.length > 0 && { attachments }),
+        ...(resolvedAttachments.length > 0 && {
+          attachments: resolvedAttachments,
+        }),
       })
     } else {
       // Create new chat
@@ -67,12 +79,15 @@ export async function POST(request: NextRequest) {
         system: 'v0 MUST always generate code even if the user just says "hi" or asks a question. v0 MUST NOT ask the user to clarify their request.',
         message: message.trim(),
         modelConfiguration: {
-          modelId: modelId,
+          // SDK 0.5.1 types still list legacy IDs; runtime uses current API IDs.
+          modelId: resolvedModelId as never,
           imageGenerations: imageGenerations,
           thinking: thinking,
         },
         ...(projectId && { projectId }),
-        ...(attachments.length > 0 && { attachments }),
+        ...(resolvedAttachments.length > 0 && {
+          attachments: resolvedAttachments,
+        }),
       })
 
       // If a project was created/returned, associate it with the user's IP
