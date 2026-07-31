@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
+import {
+  DEFAULT_V0_MODEL_ID,
+  normalizeModelId,
+  type V0ModelId,
+} from '@/lib/v0-request'
 
-export type ModelType = 'v0-1.5-sm' | 'v0-1.5-md' | 'v0-1.5-lg'
+export type ModelType = V0ModelId
 
 export interface Settings {
   model: ModelType
@@ -9,9 +14,17 @@ export interface Settings {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  model: 'v0-1.5-md',
+  model: DEFAULT_V0_MODEL_ID,
   imageGenerations: false,
   thinking: false,
+}
+
+function normalizeSettings(raw: Partial<Settings> | null | undefined): Settings {
+  return {
+    model: normalizeModelId(raw?.model),
+    imageGenerations: Boolean(raw?.imageGenerations),
+    thinking: Boolean(raw?.thinking),
+  }
 }
 
 export function useSettings() {
@@ -23,7 +36,13 @@ export function useSettings() {
       const saved = localStorage.getItem('v0-settings')
       if (saved) {
         const parsed = JSON.parse(saved)
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed })
+        const normalized = normalizeSettings(parsed)
+        setSettings(normalized)
+
+        // Persist migration away from legacy model IDs
+        if (parsed?.model !== normalized.model) {
+          localStorage.setItem('v0-settings', JSON.stringify(normalized))
+        }
       }
     } catch (error) {
       console.warn('Failed to load settings from localStorage:', error)
@@ -32,7 +51,7 @@ export function useSettings() {
 
   // Save settings to localStorage when they change
   const updateSettings = (newSettings: Partial<Settings>) => {
-    const updated = { ...settings, ...newSettings }
+    const updated = normalizeSettings({ ...settings, ...newSettings })
     setSettings(updated)
 
     try {

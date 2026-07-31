@@ -50,19 +50,24 @@ export default function SettingsDialog({ trigger }: SettingsDialogProps) {
 
   const modelOptions = [
     {
-      value: 'v0-1.5-sm' as ModelType,
-      label: 'v0-1.5-sm',
+      value: 'v0-mini' as ModelType,
+      label: 'v0-mini',
       description: 'Fast and efficient for simple apps',
     },
     {
-      value: 'v0-1.5-md' as ModelType,
-      label: 'v0-1.5-md',
+      value: 'v0-pro' as ModelType,
+      label: 'v0-pro',
       description: 'Balanced performance and quality (default)',
     },
     {
-      value: 'v0-1.5-lg' as ModelType,
-      label: 'v0-1.5-lg',
+      value: 'v0-max' as ModelType,
+      label: 'v0-max',
       description: 'Best quality for complex applications',
+    },
+    {
+      value: 'v0-max-fast' as ModelType,
+      label: 'v0-max-fast',
+      description: 'High quality with faster responses',
     },
   ]
 
